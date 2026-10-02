@@ -7,7 +7,7 @@ import {
   MessageCircle,
 } from 'lucide-react';
 
-import { CandyProduct, CartItem, ChildUser, StoreSettings, OrderRecord, CandyCategory } from './types/candy';
+import { CandyProduct, CartItem, ChildUser, StoreSettings, OrderRecord, CandyCategory, ManagerAccount } from './types/candy';
 import { DEFAULT_CANDIES, DEFAULT_STORE_SETTINGS, CATEGORY_INFO } from './data/defaultCandies';
 import { formatPrice, fireCandyConfetti, formatPhoneNumber } from './utils/formatters';
 
@@ -20,6 +20,15 @@ import { SignupModal } from './components/SignupModal';
 import { LoginModal } from './components/LoginModal';
 import { ProfileModal } from './components/ProfileModal';
 import { CandyDetailsModal } from './components/CandyDetailsModal';
+import { AdminDashboard } from './components/admin/AdminDashboard';
+import { ManagerLoginModal } from './components/admin/ManagerLoginModal';
+import {
+  apiFetchCandies,
+  apiFetchOrders,
+  apiFetchSettings,
+  checkBackendStatus,
+  BackendStatus,
+} from './services/api';
 
 export default function App() {
   // 1. Candies Catalog State (with localStorage persistence)
@@ -114,12 +123,72 @@ export default function App() {
   });
 
   // UI Views & Modals States
-  const [currentView, setCurrentView] = useState<'landing' | 'orders' | 'cart'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'orders' | 'cart' | 'admin'>('landing');
+  const [currentManager, setCurrentManager] = useState<ManagerAccount | null>(() => {
+    try {
+      const saved = localStorage.getItem('bonbon_manager_session');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return null;
+  });
+  const [isManagerLoginOpen, setIsManagerLoginOpen] = useState(false);
+  const [backendStatus, setBackendStatus] = useState<BackendStatus>({
+    isBackendReachable: false,
+    isSupabaseConnected: false,
+    backendUrl: 'http://localhost:3001/api',
+  });
   const [isSignupOpen, setIsSignupOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
   const [selectedCandyForDetails, setSelectedCandyForDetails] = useState<CandyProduct | null>(null);
+
+  // Initial Sync with Express Backend & Supabase
+  const refreshAllData = async () => {
+    try {
+      const status = await checkBackendStatus();
+      setBackendStatus(status);
+
+      const [remoteCandies, remoteOrders, remoteSettings] = await Promise.all([
+        apiFetchCandies(),
+        apiFetchOrders(),
+        apiFetchSettings(),
+      ]);
+
+      if (remoteCandies && remoteCandies.length > 0) setCandies(remoteCandies);
+      if (remoteOrders) setOrders(remoteOrders);
+      if (remoteSettings) setSettings(remoteSettings);
+    } catch (e) {
+      console.warn('Initial data refresh warning:', e);
+    }
+  };
+
+  useEffect(() => {
+    refreshAllData();
+  }, []);
+
+  const handleOpenAdmin = () => {
+    if (currentManager) {
+      setCurrentView('admin');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      setIsManagerLoginOpen(true);
+    }
+  };
+
+  const handleManagerLoginSuccess = (mgr: ManagerAccount) => {
+    setCurrentManager(mgr);
+    localStorage.setItem('bonbon_manager_session', JSON.stringify(mgr));
+    setCurrentView('admin');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleManagerLogout = () => {
+    setCurrentManager(null);
+    localStorage.removeItem('bonbon_manager_session');
+    setCurrentView('landing');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -299,33 +368,54 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#FFF9FB] flex flex-col selection:bg-pink-300 selection:text-pink-900">
       {/* 1. Global Navigation Bar */}
-      <Navbar
-        user={currentUser}
-        currentView={currentView}
-        onNavigateCart={() => {
-          setCurrentView('cart');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
-        onNavigateOrders={() => {
-          setCurrentView('orders');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
-        onNavigateHome={() => {
-          setCurrentView('landing');
-          setSelectedCategory('all');
-          setSearchQuery('');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
-        onOpenSignup={() => setIsSignupOpen(true)}
-        onOpenLogin={() => setIsLoginOpen(true)}
-        onOpenProfile={() => setIsProfileOpen(true)}
-        onLogout={handleLogout}
-        ordersCount={userOrdersCount}
-        cartTypesCount={cartTypesCount}
-        settings={settings}
-      />
+      {currentView !== 'admin' && (
+        <Navbar
+          user={currentUser}
+          currentView={currentView}
+          onNavigateCart={() => {
+            setCurrentView('cart');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onNavigateOrders={() => {
+            setCurrentView('orders');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onNavigateHome={() => {
+            setCurrentView('landing');
+            setSelectedCategory('all');
+            setSearchQuery('');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onOpenSignup={() => setIsSignupOpen(true)}
+          onOpenLogin={() => setIsLoginOpen(true)}
+          onOpenProfile={() => setIsProfileOpen(true)}
+          onLogout={handleLogout}
+          onOpenAdmin={handleOpenAdmin}
+          isManagerLoggedIn={Boolean(currentManager)}
+          ordersCount={userOrdersCount}
+          cartTypesCount={cartTypesCount}
+          settings={settings}
+        />
+      )}
 
-      {currentView === 'cart' ? (
+      {currentView === 'admin' && currentManager ? (
+        <AdminDashboard
+          currentManager={currentManager}
+          candies={candies}
+          orders={orders}
+          settings={settings}
+          backendStatus={backendStatus}
+          onRefreshData={refreshAllData}
+          onNavigateHome={() => {
+            setCurrentView('landing');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onLogout={handleManagerLogout}
+          onUpdateCandiesState={(newCandies) => setCandies(newCandies)}
+          onUpdateOrdersState={(newOrders) => setOrders(newOrders)}
+          onUpdateSettingsState={(newSettings) => setSettings(newSettings)}
+        />
+      ) : currentView === 'cart' ? (
         <CartPage
           cart={cart}
           user={currentUser}
@@ -536,8 +626,9 @@ export default function App() {
       )}
 
       {/* 4. Footer */}
-      <footer className="bg-slate-900 text-white pt-12 pb-8 border-t border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      {currentView !== 'admin' && (
+        <footer className="bg-slate-900 text-white pt-12 pb-8 border-t border-slate-800">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-8 border-b border-slate-800">
             {/* Brand column */}
             <div className="space-y-3 md:col-span-2">
@@ -629,10 +720,18 @@ export default function App() {
               <span>Livraison Fraîcheur</span>
               <span>·</span>
               <span>Paiement à la livraison / WhatsApp</span>
+              <span>·</span>
+              <button
+                onClick={handleOpenAdmin}
+                className="hover:text-pink-300 transition-colors cursor-pointer flex items-center gap-1 font-bold text-pink-400"
+              >
+                🔐 Espace Gérant (Admin)
+              </button>
             </div>
           </div>
         </div>
       </footer>
+      )}
 
       {/* Modals & Dialogs */}
       <WhatsAppOrderModal
@@ -683,6 +782,14 @@ export default function App() {
           setCurrentUser(u);
         }}
         onLogout={handleLogout}
+      />
+
+      {/* 4. Modal: Connexion Gérant / Administration */}
+      <ManagerLoginModal
+        isOpen={isManagerLoginOpen}
+        onClose={() => setIsManagerLoginOpen(false)}
+        onSuccess={handleManagerLoginSuccess}
+        settings={settings}
       />
 
       <CandyDetailsModal

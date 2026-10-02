@@ -7,12 +7,13 @@ import {
   Home,
   ChevronDown,
   ClipboardList,
+  ShieldCheck,
 } from 'lucide-react';
 import { ChildUser, StoreSettings } from '../types/candy';
 
 interface NavbarProps {
   user: ChildUser | null;
-  currentView: 'landing' | 'orders' | 'cart';
+  currentView: 'landing' | 'orders' | 'cart' | 'admin';
   onNavigateCart: () => void;
   onNavigateOrders: () => void;
   onNavigateHome: () => void;
@@ -20,6 +21,8 @@ interface NavbarProps {
   onOpenLogin: () => void;
   onOpenProfile: () => void;
   onLogout: () => void;
+  onOpenAdmin: () => void;
+  isManagerLoggedIn?: boolean;
   ordersCount: number;
   cartTypesCount: number;
   settings: StoreSettings;
@@ -36,6 +39,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenLogin,
   onOpenProfile,
   onLogout,
+  onOpenAdmin,
+  isManagerLoggedIn = false,
   ordersCount = 0,
   cartTypesCount = 0,
   settings,
@@ -97,7 +102,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
 
         {/* Middle Navigation Links (Desktop) */}
-        <nav className="hidden lg:flex items-center gap-6 text-sm font-semibold text-slate-600">
+        <nav className="hidden lg:flex items-center gap-5 text-sm font-semibold text-slate-600">
           {currentView !== 'landing' ? (
             <button
               onClick={onNavigateHome}
@@ -113,6 +118,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               Nos Saveurs
             </a>
+          )}
+          {currentView !== 'admin' && (
+            <button
+              onClick={onOpenAdmin}
+              className="hover:text-amber-800 text-slate-600 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200"
+              title="Accéder à l'interface d'administration"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+              <span>{isManagerLoggedIn ? 'Admin 👑' : 'Espace Gérant'}</span>
+            </button>
           )}
         </nav>
 
@@ -247,6 +262,27 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </button>
                   </>
                 )}
+
+                {/* Option Espace Gérant / Admin */}
+                <div className="border-t border-pink-100 my-1" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAccountDropdownOpen(false);
+                    onOpenAdmin();
+                  }}
+                  className="w-full text-left px-4 py-2 hover:bg-amber-50/90 flex items-center gap-2.5 transition-colors cursor-pointer text-xs font-bold text-amber-900 group"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="block leading-tight">
+                      {isManagerLoggedIn ? 'Tableau de Bord Admin' : 'Accès Gérant Confiserie'}
+                    </span>
+                    <span className="text-[10px] text-amber-600 font-medium">Stocks, prix & WhatsApp</span>
+                  </div>
+                </button>
               </div>
             )}
           </div>
