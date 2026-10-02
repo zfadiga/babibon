@@ -1,0 +1,6 @@
+{
+  "name": "BonbonMagique - Confiserie Enchanteur pour Enfants",
+  "description": "Boutique en ligne féerique de bonbons et friandises pour enfants, avec commande instantanée par WhatsApp, panier interactif et espace gérant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
