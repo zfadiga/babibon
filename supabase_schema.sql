@@ -57,7 +57,29 @@ CREATE TABLE IF NOT EXISTS public.store_settings (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. Activer Row Level Security (RLS) avec politiques d'accès public/anonyme pour le front
+-- 4. Table des Profils Utilisateurs & Rôles (Vérification Rôle 'admin')
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id TEXT PRIMARY KEY,
+    email TEXT,
+    username TEXT,
+    role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user', 'manager')),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Profil admin par défaut
+INSERT INTO public.profiles (id, email, username, role)
+VALUES ('admin', 'admin@bonbonmagique.com', 'admin', 'admin')
+ON CONFLICT (id) DO UPDATE SET role = 'admin';
+
+-- 5. Activer Row Level Security (RLS) avec politiques d'accès
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Profiles Read" ON public.profiles;
+CREATE POLICY "Public Profiles Read" ON public.profiles FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Admin Profiles Write" ON public.profiles;
+CREATE POLICY "Admin Profiles Write" ON public.profiles FOR ALL USING (true) WITH CHECK (true);
+
+-- 6. Activer Row Level Security (RLS) pour les autres tables
 ALTER TABLE public.candies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.store_settings ENABLE ROW LEVEL SECURITY;

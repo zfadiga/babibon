@@ -52,23 +52,23 @@ export function mapCandyRowToModel(row: any) {
   };
 }
 
-// Convert Frontend Candy (camelCase) to DB row (snake_case)
+// Convert Frontend Candy to DB row (snake_case)
 export function mapModelToCandyRow(c: any) {
   return {
     id: c.id,
     name: c.name,
-    description: c.description,
-    price: c.price,
-    category: c.category,
-    flavor_badge: c.flavorBadge,
-    badge_color: c.badgeColor,
-    image_url: c.imageUrl,
-    gradient_bg: c.gradientBg,
-    emoji_icon: c.emojiIcon,
-    is_popular: c.isPopular,
-    is_new: c.isNew,
-    stock: c.stock,
-    weight_grams: c.weightGrams,
+    description: c.description || '',
+    price: Number(c.price),
+    category: c.category || 'gummy',
+    flavor_badge: c.flavor_badge || c.flavorBadge || 'Gourmandise 🍬',
+    badge_color: c.badge_color || c.badgeColor || 'bg-pink-100 text-pink-800 border-pink-200',
+    image_url: c.image_url || c.imageUrl || '',
+    gradient_bg: c.gradient_bg || c.gradientBg || 'from-pink-200 via-rose-100 to-amber-100',
+    emoji_icon: c.emoji_icon || c.emojiIcon || '🍬',
+    is_popular: Boolean(c.is_popular !== undefined ? c.is_popular : c.isPopular),
+    is_new: Boolean(c.is_new !== undefined ? c.is_new : c.isNew),
+    stock: c.stock !== undefined ? Number(c.stock) : 50,
+    weight_grams: c.weight_grams !== undefined ? Number(c.weight_grams) : (c.weightGrams || 100),
     updated_at: new Date().toISOString(),
   };
 }

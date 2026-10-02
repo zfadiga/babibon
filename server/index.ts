@@ -102,7 +102,7 @@ app.post('/api/admin/login', async (req: Request, res: Response) => {
 // ==========================================
 // 3. Candies CRUD (Catalogue Bonbons)
 // ==========================================
-app.get('/api/candies', async (req: Request, res: Response) => {
+app.get(['/api/candies', '/api/admin/candies'], async (req: Request, res: Response) => {
   try {
     const supabase = getSupabase();
     if (supabase) {
@@ -124,14 +124,23 @@ app.get('/api/candies', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/api/candies', async (req: Request, res: Response) => {
+app.post(['/api/candies', '/api/admin/candies'], async (req: Request, res: Response) => {
   try {
     const newCandy: CandyProduct = {
-      ...req.body,
       id: req.body.id || `candy-${Date.now()}`,
+      name: req.body.name,
+      description: req.body.description || '',
       price: Number(req.body.price) || 500,
       stock: req.body.stock !== undefined ? Number(req.body.stock) : 50,
-      weightGrams: req.body.weightGrams !== undefined ? Number(req.body.weightGrams) : 100,
+      category: req.body.category || 'gummy',
+      imageUrl: req.body.image_url || req.body.imageUrl || 'https://images.unsplash.com/photo-1582058091505-f87a2e55a40f?auto=format&fit=crop&w=600&q=80',
+      weightGrams: req.body.weight_grams !== undefined ? Number(req.body.weight_grams) : (req.body.weightGrams || 100),
+      flavorBadge: req.body.flavor_badge || req.body.flavorBadge || 'Gourmandise 🍬',
+      badgeColor: req.body.badge_color || req.body.badgeColor || 'bg-pink-100 text-pink-800 border-pink-200',
+      gradientBg: req.body.gradient_bg || req.body.gradientBg || 'from-pink-200 via-rose-100 to-amber-100',
+      emojiIcon: req.body.emoji_icon || req.body.emojiIcon || '🍬',
+      isPopular: Boolean(req.body.is_popular !== undefined ? req.body.is_popular : req.body.isPopular),
+      isNew: Boolean(req.body.is_new !== undefined ? req.body.is_new : req.body.isNew),
     };
 
     const supabase = getSupabase();
@@ -152,10 +161,13 @@ app.post('/api/candies', async (req: Request, res: Response) => {
   }
 });
 
-app.put('/api/candies/:id', async (req: Request, res: Response) => {
+app.put(['/api/candies/:id', '/api/admin/candies/:id'], async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const updatedData: Partial<CandyProduct> = req.body;
+    const updatedData: Partial<CandyProduct> = {
+      ...req.body,
+      imageUrl: req.body.image_url || req.body.imageUrl,
+    };
 
     const supabase = getSupabase();
     if (supabase) {
@@ -175,7 +187,7 @@ app.put('/api/candies/:id', async (req: Request, res: Response) => {
   }
 });
 
-app.delete('/api/candies/:id', async (req: Request, res: Response) => {
+app.delete(['/api/candies/:id', '/api/admin/candies/:id'], async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const supabase = getSupabase();
@@ -195,7 +207,7 @@ app.delete('/api/candies/:id', async (req: Request, res: Response) => {
 // ==========================================
 // 4. Orders CRUD (Commandes)
 // ==========================================
-app.get('/api/orders', async (req: Request, res: Response) => {
+app.get(['/api/orders', '/api/admin/orders'], async (req: Request, res: Response) => {
   try {
     const supabase = getSupabase();
     if (supabase) {

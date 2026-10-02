@@ -22,6 +22,7 @@ import { ProfileModal } from './components/ProfileModal';
 import { CandyDetailsModal } from './components/CandyDetailsModal';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { ManagerLoginModal } from './components/admin/ManagerLoginModal';
+import { AdminPage } from './pages/AdminPage';
 import {
   apiFetchCandies,
   apiFetchOrders,
@@ -168,12 +169,8 @@ export default function App() {
   }, []);
 
   const handleOpenAdmin = () => {
-    if (currentManager) {
-      setCurrentView('admin');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      setIsManagerLoginOpen(true);
-    }
+    setCurrentView('admin');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleManagerLoginSuccess = (mgr: ManagerAccount) => {
@@ -398,22 +395,13 @@ export default function App() {
         />
       )}
 
-      {currentView === 'admin' && currentManager ? (
-        <AdminDashboard
-          currentManager={currentManager}
-          candies={candies}
-          orders={orders}
-          settings={settings}
-          backendStatus={backendStatus}
-          onRefreshData={refreshAllData}
+      {currentView === 'admin' ? (
+        <AdminPage
           onNavigateHome={() => {
             setCurrentView('landing');
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          onLogout={handleManagerLogout}
-          onUpdateCandiesState={(newCandies) => setCandies(newCandies)}
-          onUpdateOrdersState={(newOrders) => setOrders(newOrders)}
-          onUpdateSettingsState={(newSettings) => setSettings(newSettings)}
+          apiBaseUrl="/api"
         />
       ) : currentView === 'cart' ? (
         <CartPage
