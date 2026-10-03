@@ -123,8 +123,16 @@ export default function App() {
     return [];
   });
 
-  // UI Views & Modals States
-  const [currentView, setCurrentView] = useState<'landing' | 'orders' | 'cart' | 'admin'>('landing');
+  // UI Views & Modals States (Initialized with hash if present)
+  const [currentView, setCurrentView] = useState<'landing' | 'orders' | 'cart' | 'admin'>(() => {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const h = window.location.hash.toLowerCase().replace('#', '');
+      if (h === 'admin') return 'admin';
+      if (h === 'orders') return 'orders';
+      if (h === 'cart') return 'cart';
+    }
+    return 'landing';
+  });
   const [currentManager, setCurrentManager] = useState<ManagerAccount | null>(() => {
     try {
       const saved = localStorage.getItem('bonbon_manager_session');
@@ -143,6 +151,25 @@ export default function App() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
   const [selectedCandyForDetails, setSelectedCandyForDetails] = useState<CandyProduct | null>(null);
+
+  // Synchronize URL Hash (#admin, #cart, #orders, #landing)
+  useEffect(() => {
+    const handleHashSync = () => {
+      const h = window.location.hash.toLowerCase().replace('#', '');
+      if (h === 'admin') {
+        setCurrentView('admin');
+      } else if (h === 'orders') {
+        setCurrentView('orders');
+      } else if (h === 'cart') {
+        setCurrentView('cart');
+      } else if (h === 'landing' || h === '') {
+        setCurrentView('landing');
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashSync);
+    return () => window.removeEventListener('hashchange', handleHashSync);
+  }, []);
 
   // Initial Sync with Express Backend & Supabase
   const refreshAllData = async () => {
@@ -169,6 +196,7 @@ export default function App() {
   }, []);
 
   const handleOpenAdmin = () => {
+    window.location.hash = 'admin';
     setCurrentView('admin');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -176,6 +204,7 @@ export default function App() {
   const handleManagerLoginSuccess = (mgr: ManagerAccount) => {
     setCurrentManager(mgr);
     localStorage.setItem('bonbon_manager_session', JSON.stringify(mgr));
+    window.location.hash = 'admin';
     setCurrentView('admin');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -183,6 +212,8 @@ export default function App() {
   const handleManagerLogout = () => {
     setCurrentManager(null);
     localStorage.removeItem('bonbon_manager_session');
+    localStorage.removeItem('bonbon_admin_token');
+    window.location.hash = '';
     setCurrentView('landing');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };

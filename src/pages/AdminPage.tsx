@@ -14,6 +14,9 @@ import {
   ExternalLink,
   DollarSign,
   TrendingUp,
+  Lock,
+  User,
+  Key,
 } from 'lucide-react';
 import { getSupabaseFrontendClient } from '../lib/supabase';
 
@@ -100,6 +103,98 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
   // Candies Search filter
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Quick login state for Unauthorized Access screen
+  const [loginUsername, setLoginUsername] = useState('admin');
+  const [loginPassword, setLoginPassword] = useState('admin');
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  const handleDirectAdminLogin = async (e?: React.FormEvent, overrideUser?: string, overridePass?: string) => {
+    if (e) e.preventDefault();
+    setLoginError(null);
+    setIsLoggingIn(true);
+
+    const user = (overrideUser ?? loginUsername).trim();
+    const pass = (overridePass ?? loginPassword).trim();
+
+    try {
+      const supabase = getSupabaseFrontendClient();
+      // 1. If username is an email and Supabase is configured, try Supabase login
+      if (supabase && user.includes('@')) {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: user,
+          password: pass,
+        });
+        if (error) {
+          throw new Error(error.message);
+        }
+        if (data.user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', data.user.id)
+            .maybeSingle();
+
+          if (profile?.role === 'admin') {
+            setCurrentUserEmail(data.user.email || user);
+            setUserRole('admin');
+            setIsAuthorized(true);
+            return;
+          } else {
+            setLoginError(`Ce compte (${data.user.email}) n'a pas le rôle 'admin' (rôle: ${profile?.role || 'aucun'}).`);
+            return;
+          }
+        }
+      }
+
+      // 2. Manager credentials check (admin / admin or secours / secours123)
+      if (
+        (user.toLowerCase() === 'admin' && (pass === 'admin' || pass === 'admin123')) ||
+        (user.toLowerCase() === 'secours' && pass === 'secours123')
+      ) {
+        const isBackup = user.toLowerCase() === 'secours';
+        const mgr = {
+          id: isBackup ? 'backup' : 'primary',
+          username: user,
+          name: isBackup ? 'Gérant de Secours' : 'Gérant Principal (Admin)',
+          role: 'admin',
+          password: pass,
+          createdAt: new Date().toISOString(),
+        };
+        localStorage.setItem('bonbon_manager_session', JSON.stringify(mgr));
+        localStorage.setItem('bonbon_admin_token', 'admin-token-' + Date.now());
+        setCurrentUserEmail(mgr.name);
+        setUserRole('admin');
+        setIsAuthorized(true);
+        return;
+      }
+
+      // 3. Try Express backend login endpoint
+      try {
+        const res = await fetch(`${apiBaseUrl}/admin/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: user, password: pass }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          localStorage.setItem('bonbon_manager_session', JSON.stringify(data.manager));
+          localStorage.setItem('bonbon_admin_token', 'admin-token-' + Date.now());
+          setCurrentUserEmail(data.manager?.name || user);
+          setUserRole('admin');
+          setIsAuthorized(true);
+          return;
+        }
+      } catch {}
+
+      setLoginError("Identifiant ou mot de passe incorrect. Pour tester, utilisez identifiant: 'admin' et mot de passe: 'admin'.");
+    } catch (err: any) {
+      setLoginError(err.message || 'Erreur lors de la tentative de connexion.');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
 
   // ----------------------------------------------------
   // 4. Initial Auth & Admin Role Check
@@ -369,35 +464,100 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   // ----------------------------------------------------
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-[#FFF9FB] flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-rose-100 shadow-xl shadow-rose-100/50 text-center">
-          <div className="w-16 h-16 rounded-3xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4 shadow-inner">
-            <ShieldAlert className="w-9 h-9" />
+      <div className="min-h-screen bg-[#FFF9FB] flex items-center justify-center p-4 sm:p-6">
+        <div className="max-w-md w-full bg-white rounded-3xl p-6 sm:p-8 border border-rose-100 shadow-xl shadow-rose-100/50 text-center">
+          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-3xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4 shadow-inner">
+            <ShieldAlert className="w-8 h-8 sm:w-9 sm:h-9" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
             Accès Refusé / Unauthorized access
           </h1>
-          <p className="text-sm text-slate-600 mt-2 leading-relaxed">
+          <p className="text-xs sm:text-sm text-slate-600 mt-2 leading-relaxed">
             Seuls les utilisateurs disposant explicitement du rôle <strong>"admin"</strong> dans la table{' '}
-            <code className="text-rose-600 font-mono bg-rose-50 px-1 py-0.5 rounded">profiles</code> ont l'autorisation d'accéder à cette interface.
+            <code className="text-rose-600 font-mono bg-rose-50 px-1 py-0.5 rounded">profiles</code> ou d'une session administrateur validée ont l'autorisation d'accéder à cette interface.
           </p>
 
-          <div className="mt-6 p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-left text-slate-600 space-y-1">
-            <p className="font-bold text-slate-700">Comment obtenir l'accès admin :</p>
-            <p>1. Connecte-toi avec un compte ayant le rôle admin (ex: <code className="font-bold">admin</code> / <code className="font-bold">admin</code>).</p>
-            <p>2. Ou attribue le rôle <code className="text-emerald-700 font-mono">role = 'admin'</code> à ton utilisateur dans la table Supabase <code>profiles</code>.</p>
+          <div className="mt-4 p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-left text-slate-600 space-y-1">
+            <p className="font-bold text-slate-700">Comment débloquer l'accès :</p>
+            <p>1. Connecte-toi ci-dessous avec le compte admin par défaut (<code className="font-bold">admin</code> / <code className="font-bold">admin</code>).</p>
+            <p>2. Ou utilise ton compte Supabase auquel a été attribué <code className="text-emerald-700 font-mono">role = 'admin'</code>.</p>
           </div>
 
-          <div className="mt-6 flex flex-col gap-2.5">
+          {/* Formulaire de connexion direct */}
+          <form onSubmit={(e) => handleDirectAdminLogin(e)} className="mt-5 text-left space-y-3">
+            {loginError && (
+              <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{loginError}</span>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                Identifiant ou Email
+              </label>
+              <div className="relative">
+                <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  required
+                  value={loginUsername}
+                  onChange={(e) => setLoginUsername(e.target.value)}
+                  placeholder="admin ou email Supabase"
+                  className="w-full pl-10 pr-3 py-2.5 rounded-2xl border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-pink-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                Mot de passe
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="password"
+                  required
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full pl-10 pr-3 py-2.5 rounded-2xl border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-pink-500"
+                />
+              </div>
+            </div>
+
             <button
+              type="submit"
+              disabled={isLoggingIn}
+              className="w-full py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <Key className="w-3.5 h-3.5" />
+              <span>{isLoggingIn ? 'Vérification...' : 'Se connecter en tant qu\'Administrateur'}</span>
+            </button>
+          </form>
+
+          <div className="mt-4 pt-3.5 border-t border-slate-100 flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => handleDirectAdminLogin(undefined, 'admin', 'admin')}
+              className="w-full py-2.5 rounded-2xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 font-bold text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+            >
+              <span>⚡ Connexion Express (admin / admin)</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 if (onNavigateHome) onNavigateHome();
-                else window.location.href = '/';
+                else {
+                  window.location.hash = '';
+                  window.location.href = '/';
+                }
               }}
-              className="w-full py-3 rounded-2xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-bold text-sm shadow-md shadow-pink-200 transition-all cursor-pointer flex items-center justify-center gap-2"
+              className="w-full py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
             >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Retourner à la page d'accueil</span>
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Retourner à la boutique</span>
             </button>
           </div>
         </div>
