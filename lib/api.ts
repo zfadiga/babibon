@@ -285,3 +285,38 @@ export async function createNewUser(payload: CreateUserPayload): Promise<{ succe
     user: { email: payload.email, role: payload.role, id: `mock-${Date.now()}` },
   };
 }
+
+/**
+ * Supabase Auth: Sign In with Email & Password
+ */
+export async function supabaseSignIn(email: string, password: string) {
+  if (!isSupabaseConfigured) throw new Error('Supabase is not configured');
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Supabase Auth: Sign Up with Email, Password & Profile Metadata
+ */
+export async function supabaseSignUp(email: string, password: string, metadata?: Record<string, any>) {
+  if (!isSupabaseConfigured) throw new Error('Supabase is not configured');
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: metadata || {},
+    },
+  });
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Supabase Auth: Sign Out
+ */
+export async function supabaseSignOut() {
+  if (!isSupabaseConfigured) return;
+  await supabase.auth.signOut();
+}
+
