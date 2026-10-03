@@ -1,86 +1,212 @@
--- ==========================================================
--- 🍭 BABIBON UNIFIED — SUPABASE DATABASE SCHEMA & SEED
--- ==========================================================
+-- ==============================================================================
+-- 🍭 BABIBON UNIFIED — COMPLETE SUPABASE DATABASE SCHEMA
+-- Includes all 5 tables for User Storefront & Admin Dashboard:
+-- 1. profiles (users & roles)
+-- 2. candies (product inventory)
+-- 3. cart_items (persistent user carts)
+-- 4. orders (customer purchases & status tracking)
+-- 5. order_items (line items per order)
+-- + store_settings (admin store configurations)
+-- ==============================================================================
 
--- 1. EXTENSIONS
+-- 0. EXTENSIONS
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 2. TABLE: CANDIES
+-- ------------------------------------------------------------------------------
+-- 1. TABLE: PROFILES (Extends Supabase auth.users)
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email TEXT UNIQUE NOT NULL,
+    full_name TEXT,
+    role TEXT NOT NULL DEFAULT 'customer' CHECK (role IN ('customer', 'admin', 'manager')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- ------------------------------------------------------------------------------
+-- 2. TABLE: CANDIES (Products Catalog for Store & Admin)
+-- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.candies (
     id TEXT PRIMARY KEY DEFAULT ('candy-' || floor(extract(epoch from now()) * 1000)::text),
     name TEXT NOT NULL,
     description TEXT,
-    price NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    price NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (price >= 0),
     category TEXT NOT NULL DEFAULT 'gummy',
     flavor_badge TEXT DEFAULT 'Bonbon ✨',
     badge_color TEXT DEFAULT 'bg-pink-100 text-pink-800 border-pink-200',
     image_url TEXT,
     gradient_bg TEXT DEFAULT 'from-pink-200 via-rose-100 to-amber-100',
     emoji_icon TEXT DEFAULT '🍬',
-    stock INTEGER NOT NULL DEFAULT 50,
+    stock INTEGER NOT NULL DEFAULT 50 CHECK (stock >= 0),
     weight_grams INTEGER DEFAULT 100,
     is_popular BOOLEAN DEFAULT false,
     is_new BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- 3. TABLE: ORDERS
+-- ------------------------------------------------------------------------------
+-- 3. TABLE: CART_ITEMS (User Shopping Cart)
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.cart_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    candy_id TEXT NOT NULL REFERENCES public.candies(id) ON DELETE CASCADE,
+    quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    CONSTRAINT unique_user_candy UNIQUE (user_id, candy_id)
+);
+
+-- ------------------------------------------------------------------------------
+-- 4. TABLE: ORDERS (Customer Purchases for Store Tracking & Admin Dashboard)
+-- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.orders (
     id TEXT PRIMARY KEY DEFAULT ('CMD-' || lpad(floor(random() * 100000)::text, 5, '0')),
+    user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     customer_name TEXT,
     customer_phone TEXT,
     customer_email TEXT,
     delivery_address TEXT,
-    total_amount NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    shipping_address TEXT,
+    total_amount NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
     currency TEXT DEFAULT 'FCFA',
-    status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'preparing', 'delivering', 'completed', 'cancelled'
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'preparing', 'delivering', 'completed', 'paid', 'cancelled')),
     notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- 4. TABLE: ORDER_ITEMS
+-- ------------------------------------------------------------------------------
+-- 5. TABLE: ORDER_ITEMS (Items Inside an Order)
+-- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.order_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    order_id TEXT REFERENCES public.orders(id) ON DELETE CASCADE,
+    order_id TEXT NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
+    candy_id TEXT REFERENCES public.candies(id) ON DELETE SET NULL,
     candy_name TEXT NOT NULL,
-    quantity INTEGER NOT NULL DEFAULT 1,
-    price NUMERIC(10, 2) NOT NULL DEFAULT 0
+    quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+    price NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (price >= 0),
+    price_at_purchase NUMERIC(10, 2) DEFAULT 0 CHECK (price_at_purchase >= 0)
 );
 
--- 5. ENABLE ROW LEVEL SECURITY (RLS)
+-- ------------------------------------------------------------------------------
+-- 6. TABLE: STORE_SETTINGS (Store Configuration for Admin)
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.store_settings (
+    id TEXT PRIMARY KEY DEFAULT 'default',
+    store_name TEXT DEFAULT 'BonbonMagique 🍭',
+    whatsapp_number TEXT DEFAULT '2250779323716',
+    currency TEXT DEFAULT 'FCFA',
+    eur_to_fcfa_rate NUMERIC(10, 3) DEFAULT 655.957,
+    free_delivery_threshold NUMERIC(10, 2) DEFAULT 4000,
+    delivery_fee NUMERIC(10, 2) DEFAULT 500,
+    store_notice TEXT DEFAULT 'Livraison rapide chez toi ou à l''école ! Bonbons 100% magiques et certifiés gourmands ✨',
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now())
+);
+
+-- ==============================================================================
+-- ⚡ AUTOMATIC USER PROFILE TRIGGER
+-- Automatically creates a public.profiles record when a user signs up via Supabase Auth
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO public.profiles (id, email, full_name, role)
+    VALUES (
+        NEW.id,
+        NEW.email,
+        COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
+        COALESCE(NEW.raw_user_meta_data->>'role', 'customer')
+    )
+    ON CONFLICT (id) DO UPDATE SET
+        email = EXCLUDED.email,
+        full_name = COALESCE(EXCLUDED.full_name, public.profiles.full_name),
+        role = COALESCE(EXCLUDED.role, public.profiles.role);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- ==============================================================================
+-- 🔒 ROW LEVEL SECURITY (RLS) POLICIES
+-- ==============================================================================
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.candies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.cart_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.store_settings ENABLE ROW LEVEL SECURITY;
 
--- 6. RLS POLICIES FOR CANDIES
--- Allow everyone to read candies
+-- PROFILES
+DROP POLICY IF EXISTS "Public can view profiles" ON public.profiles;
+CREATE POLICY "Public can view profiles"
+    ON public.profiles FOR SELECT
+    USING (true);
+
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+CREATE POLICY "Users can update own profile"
+    ON public.profiles FOR UPDATE
+    USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Admins can manage all profiles" ON public.profiles;
+CREATE POLICY "Admins can manage all profiles"
+    ON public.profiles FOR ALL
+    USING (
+        auth.uid() = id OR EXISTS (
+            SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
+        )
+    );
+
+-- CANDIES
 DROP POLICY IF EXISTS "Public can view candies" ON public.candies;
 CREATE POLICY "Public can view candies"
     ON public.candies FOR SELECT
     USING (true);
 
--- Allow insert/update/delete for all (or authenticate admins in production)
 DROP POLICY IF EXISTS "Public/Admins can manage candies" ON public.candies;
 CREATE POLICY "Public/Admins can manage candies"
     ON public.candies FOR ALL
     USING (true)
     WITH CHECK (true);
 
--- 7. RLS POLICIES FOR ORDERS
+-- CART_ITEMS
+DROP POLICY IF EXISTS "Users manage own cart" ON public.cart_items;
+CREATE POLICY "Users manage own cart"
+    ON public.cart_items FOR ALL
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+-- ORDERS
 DROP POLICY IF EXISTS "Public can view and insert orders" ON public.orders;
 CREATE POLICY "Public can view and insert orders"
     ON public.orders FOR ALL
     USING (true)
     WITH CHECK (true);
 
--- 8. RLS POLICIES FOR ORDER_ITEMS
+-- ORDER_ITEMS
 DROP POLICY IF EXISTS "Public can view and insert order items" ON public.order_items;
 CREATE POLICY "Public can view and insert order items"
     ON public.order_items FOR ALL
     USING (true)
     WITH CHECK (true);
 
--- 9. STORAGE BUCKET CONFIGURATION (for candy images)
+-- STORE_SETTINGS
+DROP POLICY IF EXISTS "Public can view store settings" ON public.store_settings;
+CREATE POLICY "Public can view store settings"
+    ON public.store_settings FOR SELECT
+    USING (true);
+
+DROP POLICY IF EXISTS "Public/Admins can update store settings" ON public.store_settings;
+CREATE POLICY "Public/Admins can update store settings"
+    ON public.store_settings FOR ALL
+    USING (true)
+    WITH CHECK (true);
+
+-- ==============================================================================
+-- 📦 STORAGE BUCKET FOR CANDY IMAGES
+-- ==============================================================================
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('candies', 'candies', true)
 ON CONFLICT (id) DO NOTHING;
@@ -95,7 +221,13 @@ CREATE POLICY "Allow Upload Candies Images"
     ON storage.objects FOR INSERT
     WITH CHECK (bucket_id = 'candies');
 
--- 10. INITIAL SEED DATA (Default Candies)
+-- ==============================================================================
+-- 🍭 SEED DATA (Default Candies & Settings)
+-- ==============================================================================
+INSERT INTO public.store_settings (id, store_name, whatsapp_number, currency, eur_to_fcfa_rate, free_delivery_threshold, delivery_fee)
+VALUES ('default', 'BonbonMagique 🍭', '2250779323716', 'FCFA', 655.957, 4000, 500)
+ON CONFLICT (id) DO NOTHING;
+
 INSERT INTO public.candies (id, name, description, price, category, flavor_badge, badge_color, image_url, emoji_icon, is_popular, is_new, stock, weight_grams)
 VALUES
 (
