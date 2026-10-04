@@ -91,6 +91,24 @@ export const SignupModal: React.FC = () => {
 
           if (authData?.user?.id) {
             assignedId = authData.user.id;
+            try {
+              await supabase.from('profiles').upsert([
+                {
+                  id: authData.user.id,
+                  email: userEmail,
+                  username: cleanUsername,
+                  full_name: cleanFirstName,
+                  avatar: selectedAvatar.emoji,
+                  avatar_bg: selectedAvatar.bg,
+                  favorite_flavor: favoriteFlavor,
+                  phone: phone.trim() || null,
+                  delivery_address: deliveryAddress.trim() || null,
+                  role: 'client',
+                },
+              ]);
+            } catch (pErr) {
+              console.warn('Profile upsert notice:', pErr);
+            }
           }
         } catch (authErr) {
           console.warn('Supabase auth signup fallback:', authErr);

@@ -20,6 +20,8 @@ import {
   XCircle,
   AlertTriangle,
   Loader2,
+  Camera,
+  ExternalLink,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { formatPrice } from '@/utils/formatters';
@@ -72,9 +74,15 @@ export const OrdersView: React.FC = () => {
   const getWhatsAppFollowupLink = (order: OrderRecord) => {
     const cleanNumber = (settings.whatsappNumber || '2250779323716').replace(/[^0-9]/g, '');
     const clientName = order.childName || order.customer_name || 'Client';
-    const message = encodeURIComponent(
-      `Bonjour ${settings.storeName} ! 👋 Je viens aux nouvelles concernant ma commande *${order.id}* passée par ${clientName}. Merci d'avance ! 🍬`
-    );
+    const mediaImg = order.imageUrl || order.image_url || order.items?.find((i) => i.image_url || i.imageUrl)?.image_url;
+
+    let text = `Bonjour ${settings.storeName} ! 👋 Je viens aux nouvelles concernant ma commande *${order.id}* passée par ${clientName}.`;
+    if (mediaImg && mediaImg.startsWith('http')) {
+      text += `\n📸 Photo commande : ${mediaImg}`;
+    }
+    text += `\nMerci d'avance ! 🍬`;
+
+    const message = encodeURIComponent(text);
     return `https://wa.me/${cleanNumber}?text=${message}`;
   };
 
@@ -401,6 +409,19 @@ export const OrdersView: React.FC = () => {
                         <Phone className="w-3.5 h-3.5 text-pink-500 shrink-0" />
                         <span>{order.customerPhone}</span>
                       </span>
+                    )}
+                    {(order.imageUrl || order.image_url || order.mediaUrl || order.media_url) && (
+                      <a
+                        href={(order.imageUrl || order.image_url || order.mediaUrl || order.media_url) as string}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-pink-600 hover:text-pink-700 font-semibold bg-pink-50 hover:bg-pink-100 px-2 py-0.5 rounded-lg border border-pink-200 transition-colors"
+                        title="Voir la photo jointe à la commande"
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>Photo jointe</span>
+                        <ExternalLink className="w-3 h-3 text-pink-400" />
+                      </a>
                     )}
                   </div>
 

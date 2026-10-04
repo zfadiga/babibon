@@ -77,6 +77,8 @@ export interface OrderItemRecord {
   name?: string;
   quantity: number;
   price: number;
+  image_url?: string;
+  imageUrl?: string;
 }
 
 export interface OrderRecord {
@@ -95,5 +97,9 @@ export interface OrderRecord {
   customerPhone?: string;
   deliveryAddress?: string;
   notes?: string;
+  image_url?: string;
+  imageUrl?: string;
+  media_url?: string;
+  mediaUrl?: string;
   status?: 'pending' | 'preparing' | 'processing' | 'delivering' | 'completed' | 'cancelled' | string;
 }

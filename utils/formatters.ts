@@ -100,7 +100,7 @@ function randomInRange(min: number, max: number) {
 }
 
 /**
- * Builds the WhatsApp pre-filled order text and generates wa.me link
+ * Builds the WhatsApp pre-filled order text and generates wa.me link with image support
  */
 export function generateWhatsAppOrderUrl(params: {
   cart: CartItem[];
@@ -110,8 +110,10 @@ export function generateWhatsAppOrderUrl(params: {
   customerPhone?: string;
   notes?: string;
   deliveryFee: number;
+  imageUrl?: string;
+  orderId?: string;
 }): { url: string; formattedMessage: string } {
-  const { cart, user, settings, deliveryAddress, customerPhone, notes, deliveryFee } = params;
+  const { cart, user, settings, deliveryAddress, customerPhone, notes, deliveryFee, imageUrl, orderId } = params;
 
   const childName = user ? `${user.firstName} (${user.avatar} ${user.username})` : 'Petit Gourmand';
 
@@ -119,6 +121,9 @@ export function generateWhatsAppOrderUrl(params: {
   const total = subtotal + deliveryFee;
 
   let message = `🍭 *NOUVELLE COMMANDE GOURMANDE !* 🍭\n`;
+  if (orderId) {
+    message += `🔖 *Référence :* #${orderId}\n`;
+  }
   message += `━━━━━━━━━━━━━━━━━━━━━\n`;
   message += `👤 *Client :* ${childName}\n`;
   if (customerPhone && customerPhone.trim().length > 0) {
@@ -133,7 +138,11 @@ export function generateWhatsAppOrderUrl(params: {
   cart.forEach((item, index) => {
     const itemTotal = item.candy.price * item.quantity;
     const formattedItemTotal = formatPrice(itemTotal, settings.currency, settings.eurToFcfaRate);
+    const itemImg = item.candy.imageUrl || item.candy.image_url;
     message += `${index + 1}. *${item.candy.name}* (x${item.quantity}) - ${formattedItemTotal}\n`;
+    if (itemImg && itemImg.startsWith('http')) {
+      message += `   📸 Photo : ${itemImg}\n`;
+    }
   });
 
   message += `\n`;
@@ -144,6 +153,17 @@ export function generateWhatsAppOrderUrl(params: {
     message += `🚚 *Livraison :* OFFERTE ✨\n`;
   }
   message += `⭐ *TOTAL À PAYER : ${formatPrice(total, settings.currency, settings.eurToFcfaRate)}*\n`;
+
+  // Attached image or primary preview image
+  const primaryItemImg = cart.find((i) => (i.candy.imageUrl || i.candy.image_url)?.startsWith('http'))?.candy;
+  const fallbackImg = primaryItemImg ? (primaryItemImg.imageUrl || primaryItemImg.image_url) : undefined;
+  const mediaLink = imageUrl || fallbackImg;
+
+  if (mediaLink && mediaLink.startsWith('http')) {
+    message += `━━━━━━━━━━━━━━━━━━━━━\n`;
+    message += `🖼️ *Photo / Aperçu visuel de la commande :*\n${mediaLink}\n`;
+  }
+
   message += `━━━━━━━━━━━━━━━━━━━━━\n`;
 
   if (notes && notes.trim().length > 0) {

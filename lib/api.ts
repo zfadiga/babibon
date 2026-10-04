@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-import { Candy, NewCandyPayload, Order, CreateUserPayload } from '@/types';
+import { Candy, NewCandyPayload, Order, CreateUserPayload, UserProfile } from '@/types';
 import { DEFAULT_CANDIES, INITIAL_MOCK_ORDERS, DEFAULT_STORE_SETTINGS } from '@/data/defaultCandies';
 import { CandyProduct, OrderRecord, StoreSettings } from '@/types/candy';
 
@@ -212,7 +212,21 @@ export async function fetchOrders(): Promise<Order[]> {
         .order('created_at', { ascending: false });
 
       if (!error && data) {
-        return data;
+        return data.map((o: any) => ({
+          ...o,
+          customer_name: o.customer_name || o.childName || 'Client',
+          childName: o.customer_name || o.childName || 'Client',
+          customerPhone: o.customer_phone || o.customerPhone,
+          customer_phone: o.customer_phone || o.customerPhone,
+          deliveryAddress: o.delivery_address || o.deliveryAddress,
+          delivery_address: o.delivery_address || o.deliveryAddress,
+          totalAmount: Number(o.total_amount ?? o.totalAmount ?? 0),
+          total_amount: Number(o.total_amount ?? o.totalAmount ?? 0),
+          image_url: o.image_url || o.imageUrl || o.media_url || o.mediaUrl || null,
+          imageUrl: o.image_url || o.imageUrl || o.media_url || o.mediaUrl || null,
+          media_url: o.media_url || o.mediaUrl || o.image_url || o.imageUrl || null,
+          mediaUrl: o.media_url || o.mediaUrl || o.image_url || o.imageUrl || null,
+        }));
       }
     } catch (e) {
       console.warn('Supabase fetchOrders error:', e);
@@ -226,9 +240,10 @@ export async function fetchOrders(): Promise<Order[]> {
  * Save new order record (from client store or admin)
  */
 export async function submitOrder(order: OrderRecord): Promise<{ success: boolean; order: OrderRecord }> {
+  const generatedId = order.id ? String(order.id) : `CMD-${Math.floor(100000 + Math.random() * 900000)}`;
   const normalizedOrder: OrderRecord = {
     ...order,
-    id: order.id || `CMD-${Date.now().toString().slice(-6)}`,
+    id: generatedId,
     createdAt: order.createdAt || new Date().toISOString(),
     created_at: order.created_at || order.createdAt || new Date().toISOString(),
     totalAmount: order.totalAmount ?? order.total_amount ?? 0,
@@ -238,16 +253,47 @@ export async function submitOrder(order: OrderRecord): Promise<{ success: boolea
 
   if (isSupabaseConfigured) {
     try {
-      const { data, error } = await supabase.from('orders').insert([{
-        customer_name: normalizedOrder.customer_name,
-        customer_phone: normalizedOrder.customerPhone,
-        delivery_address: normalizedOrder.deliveryAddress,
+      const isUuid =
+        typeof order.childId === 'string' &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(order.childId);
+
+      const orderPayload: any = {
+        id: generatedId,
+        customer_name: normalizedOrder.customer_name || 'Client',
+        customer_phone: normalizedOrder.customerPhone || null,
+        delivery_address: normalizedOrder.deliveryAddress || null,
         total_amount: normalizedOrder.total_amount,
+        currency: normalizedOrder.currency || 'FCFA',
         status: normalizedOrder.status || 'pending',
-        notes: normalizedOrder.notes,
-      }]).select().single();
+        notes: normalizedOrder.notes || null,
+        image_url: normalizedOrder.imageUrl || normalizedOrder.image_url || null,
+        media_url: normalizedOrder.mediaUrl || normalizedOrder.media_url || null,
+      };
+
+      if (isUuid) {
+        orderPayload.user_id = order.childId;
+      }
+
+      const { data, error } = await supabase
+        .from('orders')
+        .insert([orderPayload])
+        .select()
+        .single();
 
       if (!error && data) {
+        // Also persist order items to order_items table in Supabase
+        if (order.items && order.items.length > 0) {
+          const itemsPayload = order.items.map((it) => ({
+            order_id: data.id,
+            candy_name: it.name || it.candy_name || 'Friandise',
+            candy_id: it.candy_id ? String(it.candy_id) : null,
+            quantity: it.quantity || 1,
+            price: it.price || 0,
+            price_at_purchase: it.price || 0,
+          }));
+          await supabase.from('order_items').insert(itemsPayload);
+        }
+
         return { success: true, order: { ...normalizedOrder, id: data.id } };
       }
     } catch (e) {
@@ -361,23 +407,135 @@ export async function deleteOrder(
 /**
  * Admin action: create new user
  */
+/**
+ * Image helper: Uploads order photo (delivery landmark, receipt, gift note) to Supabase storage
+ */
+export async function uploadOrderImage(file: File): Promise<string> {
+  if (isSupabaseConfigured) {
+    try {
+      const fileExt = file.name.split('.').pop() || 'jpg';
+      const cleanFileName = `order-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+
+      const { data, error } = await supabase.storage
+        .from('order-media')
+        .upload(cleanFileName, file, {
+          cacheControl: '3600',
+          upsert: true,
+        });
+
+      if (!error && data) {
+        const { data: publicData } = supabase.storage
+          .from('order-media')
+          .getPublicUrl(cleanFileName);
+        if (publicData?.publicUrl) {
+          return publicData.publicUrl;
+        }
+      }
+    } catch (storageErr) {
+      console.warn('Supabase order-media storage fallback:', storageErr);
+    }
+  }
+
+  // Base64 fallback
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Fetch all registered users and admins from Supabase profiles table
+ */
+export async function fetchProfiles(): Promise<UserProfile[]> {
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        return data as UserProfile[];
+      }
+    } catch (e) {
+      console.warn('Supabase fetchProfiles error:', e);
+    }
+  }
+
+  // Fallback to local storage registered users
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('bonbon_registered_users');
+      if (stored) {
+        const users = JSON.parse(stored);
+        return users.map((u: any) => ({
+          id: u.id,
+          username: u.username,
+          full_name: u.firstName || u.username,
+          email: u.email || `${u.username}@babibon.local`,
+          role: 'client',
+          created_at: u.joinedAt || new Date().toISOString(),
+        }));
+      }
+    } catch {}
+  }
+  return [];
+}
+
+/**
+ * Delete a profile from Supabase
+ */
+export async function deleteUserProfile(id: string): Promise<{ success: boolean; message?: string }> {
+  if (isSupabaseConfigured) {
+    try {
+      const { error } = await supabase.from('profiles').delete().eq('id', id);
+      if (error) {
+        return { success: false, message: error.message };
+      }
+    } catch (e: any) {
+      return { success: false, message: e.message };
+    }
+  }
+
+  // Also remove from localStorage if present
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('bonbon_registered_users');
+      if (stored) {
+        const users = JSON.parse(stored);
+        const filtered = users.filter((u: any) => u.id !== id);
+        localStorage.setItem('bonbon_registered_users', JSON.stringify(filtered));
+      }
+    } catch {}
+  }
+
+  return { success: true };
+}
+
+/**
+ * Admin action: create new user (Client or Admin) in Supabase
+ */
 export async function createNewUser(payload: CreateUserPayload): Promise<{ success: boolean; message?: string; user?: any }> {
   if (isSupabaseConfigured) {
     try {
+      const role = payload.role === 'admin' ? 'admin' : 'client';
       const { data, error } = await supabase.auth.signUp({
         email: payload.email,
         password: payload.password,
         options: {
           data: {
             username: payload.username,
-            role: payload.role,
+            role,
+            full_name: payload.username,
           },
         },
       });
 
       if (error) throw error;
 
-      // Upsert profile in Supabase profiles table if available
+      // Upsert profile in Supabase profiles table
       if (data.user?.id) {
         try {
           await supabase.from('profiles').upsert([
@@ -385,7 +543,8 @@ export async function createNewUser(payload: CreateUserPayload): Promise<{ succe
               id: data.user.id,
               username: payload.username,
               email: payload.email,
-              role: payload.role,
+              full_name: payload.username,
+              role,
             },
           ]);
         } catch (pErr) {
@@ -402,7 +561,7 @@ export async function createNewUser(payload: CreateUserPayload): Promise<{ succe
   // Mock mode user simulation
   return {
     success: true,
-    message: `(Mock Mode) Compte utilisateur simulé créé avec succès pour @${payload.username} (${payload.email} - ${payload.role}).`,
+    message: `(Mode Démo) Compte créé avec succès pour @${payload.username} (${payload.email} - ${payload.role}).`,
     user: { username: payload.username, email: payload.email, role: payload.role, id: `mock-${Date.now()}` },
   };
 }

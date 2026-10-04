@@ -22,6 +22,9 @@ import {
   Check,
   XCircle,
   CheckCircle2,
+  Camera,
+  ExternalLink,
+  X,
 } from 'lucide-react';
 import { formatPrice } from '@/utils/formatters';
 
@@ -132,6 +135,13 @@ export default function OrdersTable() {
   // Deletion modal state
   const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Preview attached photo modal state
+  const [previewMedia, setPreviewMedia] = useState<{
+    url: string;
+    title: string;
+    client?: string;
+  } | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -631,6 +641,37 @@ export default function OrdersTable() {
                         ) : (
                           <span className="text-xs text-gray-400">Détail non disponible</span>
                         )}
+
+                        {/* Visual Image / Media Attachment if present */}
+                        {(order.image_url || order.imageUrl || order.media_url || order.mediaUrl) && (
+                          <div className="mt-2 pt-1.5 border-t border-gray-100 flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const url = (order.image_url || order.imageUrl || order.media_url || order.mediaUrl) as string;
+                                setPreviewMedia({
+                                  url,
+                                  title: `Commande #${order.id}`,
+                                  client: clientName,
+                                });
+                              }}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                              title="Voir la photo jointe à la commande"
+                            >
+                              <Camera className="w-3 h-3" />
+                              <span>Photo jointe</span>
+                            </button>
+                            <a
+                              href={(order.image_url || order.imageUrl || order.media_url || order.mediaUrl) as string}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-gray-400 hover:text-gray-600 p-0.5 rounded transition-colors"
+                              title="Ouvrir l'image originale"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
+                        )}
                       </td>
 
                       <td className="py-4 px-6 font-bold text-gray-900">
@@ -839,6 +880,76 @@ export default function OrdersTable() {
                     <span>Confirmer la suppression</span>
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Photo Preview Lightbox Modal */}
+      {previewMedia && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setPreviewMedia(null)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-xl w-full overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/80">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center">
+                  <Camera className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-sm">
+                    {previewMedia.title}
+                  </h3>
+                  {previewMedia.client && (
+                    <p className="text-xs text-gray-500">
+                      Client : {previewMedia.client}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewMedia.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-200/50 transition-colors"
+                  title="Ouvrir l'image en taille réelle"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewMedia(null)}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-200/50 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 bg-gray-900/5 flex items-center justify-center max-h-[70vh] overflow-hidden">
+              <img
+                src={previewMedia.url}
+                alt="Aperçu commande"
+                className="max-h-[65vh] w-auto max-w-full rounded-xl object-contain shadow-md"
+              />
+            </div>
+
+            <div className="p-3 border-t border-gray-100 flex justify-between items-center bg-gray-50/50 text-xs text-gray-500">
+              <span className="truncate max-w-[280px] font-mono text-[11px]">
+                {previewMedia.url}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewMedia(null)}
+                className="px-3.5 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded-lg transition-colors cursor-pointer"
+              >
+                Fermer
               </button>
             </div>
           </div>

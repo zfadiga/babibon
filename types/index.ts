@@ -25,6 +25,8 @@ export type OrderItem = {
   name?: string;
   quantity: number;
   price: number;
+  image_url?: string;
+  imageUrl?: string;
 };
 
 export type Order = {
@@ -41,13 +43,23 @@ export type Order = {
   customerPhone?: string;
   deliveryAddress?: string;
   notes?: string;
+  image_url?: string;
+  imageUrl?: string;
+  media_url?: string;
+  mediaUrl?: string;
 };
 
 export interface UserProfile {
   id: string;
   username?: string;
   email?: string;
-  role: 'admin' | 'customer' | string;
+  full_name?: string;
+  role: 'admin' | 'customer' | 'client' | string;
+  phone?: string;
+  delivery_address?: string;
+  avatar?: string;
+  avatar_bg?: string;
+  favorite_flavor?: string;
   created_at?: string;
 }
 
@@ -64,5 +76,5 @@ export interface CreateUserPayload {
   username: string;
   email: string;
   password: string;
-  role: 'admin' | 'customer';
+  role: 'admin' | 'customer' | 'client';
 }

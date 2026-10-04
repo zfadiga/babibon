@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { User, Lock, Loader2, AlertCircle, LogIn, KeyRound } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 interface LoginFormProps {
   onSuccess: (adminData: { id: string; username: string; email: string; role: string }) => void;
@@ -13,7 +14,7 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg(null);
@@ -31,6 +32,42 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
       setErrorMsg("Le mot de passe est obligatoire.");
       setLoading(false);
       return;
+    }
+
+    // 1. Try Supabase Auth first
+    if (isSupabaseConfigured) {
+      try {
+        const loginEmail = cleanUsername.includes('@')
+          ? cleanUsername
+          : `${cleanUsername}@babibon-candyshop.com`;
+
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email: loginEmail,
+          password: cleanPassword,
+        });
+
+        if (!authError && authData?.user) {
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', authData.user.id)
+            .single();
+
+          const role = prof?.role || authData.user.user_metadata?.role || 'admin';
+          if (role === 'admin' || role === 'manager') {
+            setLoading(false);
+            onSuccess({
+              id: authData.user.id,
+              username: prof?.username || authData.user.user_metadata?.username || cleanUsername,
+              email: authData.user.email || loginEmail,
+              role: 'admin',
+            });
+            return;
+          }
+        }
+      } catch (sbErr) {
+        console.warn('Supabase admin login attempt notice:', sbErr);
+      }
     }
 
     // Check credentials: default "admin" / "admin" or stored managers
