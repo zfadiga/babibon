@@ -53,6 +53,7 @@ export default function AdminGuard({ children }: AdminGuardProps) {
         const u = JSON.parse(saved);
         return {
           id: u.id || 'admin-1',
+          username: u.username || 'admin',
           email: u.email || `${u.username || 'admin'}@babibon-candyshop.com`,
           role: u.role || 'admin',
           created_at: u.created_at || new Date().toISOString(),
@@ -73,6 +74,7 @@ export default function AdminGuard({ children }: AdminGuardProps) {
     if (!isSupabaseConfigured) {
       setProfile({
         id: currentUser.id,
+        username: (currentUser as any).username || currentUser.user_metadata?.username || currentUser.email?.split('@')[0] || 'admin',
         email: currentUser.email,
         role: 'admin',
       });
@@ -83,15 +85,17 @@ export default function AdminGuard({ children }: AdminGuardProps) {
       setErrorMsg(null);
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, email, role, created_at')
+        .select('id, username, email, role, created_at')
         .eq('id', currentUser.id)
         .single();
 
       if (error) {
         const metadataRole = currentUser.user_metadata?.role;
+        const metadataUsername = currentUser.user_metadata?.username;
         if (metadataRole) {
           setProfile({
             id: currentUser.id,
+            username: metadataUsername || currentUser.email?.split('@')[0] || 'admin',
             email: currentUser.email,
             role: metadataRole,
           });
@@ -116,7 +120,7 @@ export default function AdminGuard({ children }: AdminGuardProps) {
       email: adminData.email,
       username: adminData.username,
       app_metadata: {},
-      user_metadata: { role: adminData.role },
+      user_metadata: { role: adminData.role, username: adminData.username },
       aud: 'authenticated',
       created_at: new Date().toISOString(),
     };
@@ -124,6 +128,7 @@ export default function AdminGuard({ children }: AdminGuardProps) {
     setUser(adminUser);
     setProfile({
       id: adminData.id,
+      username: adminData.username,
       email: adminData.email,
       role: adminData.role,
       created_at: new Date().toISOString(),
@@ -151,7 +156,17 @@ export default function AdminGuard({ children }: AdminGuardProps) {
   };
 
   const handleRefresh = async () => {
-    if (user) {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('bonbon_admin_session');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setUser((prev) => ({ ...(prev || {}), ...parsed }));
+          setProfile((prev) => (prev ? { ...prev, username: parsed.username } : null));
+        }
+      } catch {}
+    }
+    if (user && isSupabaseConfigured) {
       setLoading(true);
       await fetchProfile(user);
       setLoading(false);

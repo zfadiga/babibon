@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { useAdminAuth } from './AdminGuard';
 import {
   Lock,
-  Mail,
+  User,
   CheckCircle2,
   AlertCircle,
   Loader2,
@@ -15,10 +15,15 @@ import {
 export default function AccountSettings() {
   const { user, refreshProfile } = useAdminAuth();
 
-  const [newEmail, setNewEmail] = useState('');
-  const [emailLoading, setEmailLoading] = useState(false);
-  const [emailSuccess, setEmailSuccess] = useState<string | null>(null);
-  const [emailError, setEmailError] = useState<string | null>(null);
+  const currentUsername =
+    (user as any)?.username ||
+    user?.user_metadata?.username ||
+    (user?.email ? user.email.split('@')[0] : 'admin');
+
+  const [newUsername, setNewUsername] = useState('');
+  const [usernameLoading, setUsernameLoading] = useState(false);
+  const [usernameSuccess, setUsernameSuccess] = useState<string | null>(null);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -26,33 +31,77 @@ export default function AccountSettings() {
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
-  const handleUpdateEmail = async (e: React.FormEvent) => {
+  const handleUpdateUsername = async (e: React.FormEvent) => {
     e.preventDefault();
-    setEmailLoading(true);
-    setEmailSuccess(null);
-    setEmailError(null);
+    setUsernameLoading(true);
+    setUsernameSuccess(null);
+    setUsernameError(null);
 
-    if (newEmail.trim().toLowerCase() === user?.email?.toLowerCase()) {
-      setEmailError('La nouvelle adresse email ne peut pas être identique à l\'actuelle.');
-      setEmailLoading(false);
+    const clean = newUsername.trim();
+
+    if (clean.length < 3) {
+      setUsernameError("Le nom d'utilisateur doit comporter au moins 3 caractères.");
+      setUsernameLoading(false);
+      return;
+    }
+
+    if (clean.toLowerCase() === currentUsername.toLowerCase()) {
+      setUsernameError("Le nouveau nom d'utilisateur ne peut pas être identique à l'actuel.");
+      setUsernameLoading(false);
       return;
     }
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        email: newEmail.trim(),
-      });
-      if (error) throw error;
+      if (isSupabaseConfigured && user) {
+        const { error } = await supabase.auth.updateUser({
+          data: { username: clean },
+        });
+        if (error) throw error;
 
-      setEmailSuccess(
-        `Lien de confirmation envoyé ! Veuillez vérifier la boîte de réception (${newEmail}) pour valider.`
-      );
-      setNewEmail('');
+        try {
+          await supabase
+            .from('profiles')
+            .update({ username: clean })
+            .eq('id', user.id);
+        } catch (dbErr) {
+          console.warn('Profiles table update notice:', dbErr);
+        }
+      }
+
+      // Update admin session in local storage
+      if (typeof window !== 'undefined') {
+        try {
+          const savedSession = localStorage.getItem('bonbon_admin_session');
+          if (savedSession) {
+            const parsed = JSON.parse(savedSession);
+            parsed.username = clean;
+            localStorage.setItem('bonbon_admin_session', JSON.stringify(parsed));
+          }
+
+          const savedSettings = localStorage.getItem('bonbon_settings');
+          if (savedSettings) {
+            const parsedSettings = JSON.parse(savedSettings);
+            if (parsedSettings.managers && Array.isArray(parsedSettings.managers)) {
+              parsedSettings.managers = parsedSettings.managers.map((m: any) =>
+                m.username === currentUsername || m.id === user?.id
+                  ? { ...m, username: clean }
+                  : m
+              );
+              localStorage.setItem('bonbon_settings', JSON.stringify(parsedSettings));
+            }
+          }
+        } catch (storageErr) {
+          console.warn('LocalStorage session update error:', storageErr);
+        }
+      }
+
       await refreshProfile();
+      setUsernameSuccess(`Nom d'utilisateur mis à jour avec succès : "${clean}" !`);
+      setNewUsername('');
     } catch (err: any) {
-      setEmailError(err.message || 'Impossible de mettre à jour l\'email.');
+      setUsernameError(err.message || "Impossible de mettre à jour le nom d'utilisateur.");
     } finally {
-      setEmailLoading(false);
+      setUsernameLoading(false);
     }
   };
 
@@ -107,61 +156,67 @@ export default function AccountSettings() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Email Form */}
+        {/* Username Form */}
         <div className="space-y-4">
           <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-            <Mail className="w-4 h-4 text-rose-500" />
-            <span>Changer d'adresse email</span>
+            <User className="w-4 h-4 text-rose-500" />
+            <span>Changer de nom d'utilisateur</span>
           </h3>
 
-          {emailSuccess && (
+          {usernameSuccess && (
             <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center space-x-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>{emailSuccess}</span>
+              <span>{usernameSuccess}</span>
             </div>
           )}
 
-          {emailError && (
+          {usernameError && (
             <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center space-x-2">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-              <span>{emailError}</span>
+              <span>{usernameError}</span>
             </div>
           )}
 
-          <form onSubmit={handleUpdateEmail} className="space-y-4">
+          <form onSubmit={handleUpdateUsername} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                Email actuel
+                Nom d'utilisateur actuel
               </label>
-              <input
-                type="text"
-                disabled
-                value={user?.email || ''}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-gray-500 text-xs cursor-not-allowed"
-              />
+              <div className="relative">
+                <User className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  disabled
+                  value={currentUsername}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-gray-600 font-medium text-xs cursor-not-allowed"
+                />
+              </div>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                Nouvelle adresse email
+                Nouveau nom d'utilisateur *
               </label>
-              <input
-                type="email"
-                required
-                placeholder="nouvel-email@babibon.com"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
-              />
+              <div className="relative">
+                <User className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  required
+                  placeholder="ex: admin_principal"
+                  value={newUsername}
+                  onChange={(e) => setNewUsername(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
             </div>
 
             <button
               type="submit"
-              disabled={emailLoading || !newEmail.trim()}
+              disabled={usernameLoading || !newUsername.trim()}
               className="px-5 py-2.5 bg-gray-900 hover:bg-gray-800 text-white text-xs font-semibold rounded-xl transition-all disabled:opacity-50 flex items-center space-x-2 cursor-pointer"
             >
-              {emailLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-              <span>Mettre à jour l'email</span>
+              {usernameLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+              <span>Mettre à jour le nom d'utilisateur</span>
             </button>
           </form>
         </div>

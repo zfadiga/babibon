@@ -105,15 +105,23 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // 5. Orders History
   const [orders, setOrders] = useState<OrderRecord[]>(() => {
-    if (typeof window === 'undefined') return INITIAL_MOCK_ORDERS;
+    if (typeof window === 'undefined') return [];
     try {
       const saved = localStorage.getItem('bonbon_orders');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter(
+            (o: any) => !['CMD-9042', 'CMD-9043', 'CMD-9044'].includes(String(o?.id))
+          );
+          if (filtered.length !== parsed.length) {
+            localStorage.setItem('bonbon_orders', JSON.stringify(filtered));
+          }
+          return filtered;
+        }
       }
     } catch {}
-    return INITIAL_MOCK_ORDERS;
+    return [];
   });
 
   // Modals state

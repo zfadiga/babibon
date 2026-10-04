@@ -13,10 +13,12 @@ import {
   CheckCircle2,
   AlertCircle,
   Users,
+  User,
 } from 'lucide-react';
 
 export default function UserManagement() {
   const [formData, setFormData] = useState<CreateUserPayload>({
+    username: '',
     email: '',
     password: '',
     role: 'customer',
@@ -25,7 +27,7 @@ export default function UserManagement() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [createdUsers, setCreatedUsers] = useState<
-    Array<{ email: string; role: string; timestamp: string }>
+    Array<{ username: string; email: string; role: string; timestamp: string }>
   >([]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -34,6 +36,12 @@ export default function UserManagement() {
     setSuccessMsg(null);
     setErrorMsg(null);
 
+    if (!formData.username.trim()) {
+      setErrorMsg("Le nom d'utilisateur est obligatoire.");
+      setLoading(false);
+      return;
+    }
+
     if (formData.password.length < 6) {
       setErrorMsg('Le mot de passe doit comporter au moins 6 caractères.');
       setLoading(false);
@@ -41,14 +49,18 @@ export default function UserManagement() {
     }
 
     try {
-      await createNewUser(formData);
+      await createNewUser({
+        ...formData,
+        username: formData.username.trim(),
+      });
 
       setSuccessMsg(
-        `Compte utilisateur "${formData.email}" créé avec succès avec le rôle "${formData.role}".`
+        `Compte utilisateur "${formData.username.trim()}" (${formData.email}) créé avec succès avec le rôle "${formData.role}".`
       );
 
       setCreatedUsers((prev) => [
         {
+          username: formData.username.trim(),
           email: formData.email,
           role: formData.role,
           timestamp: new Date().toLocaleTimeString('fr-FR'),
@@ -57,6 +69,7 @@ export default function UserManagement() {
       ]);
 
       setFormData({
+        username: '',
         email: '',
         password: '',
         role: 'customer',
@@ -102,6 +115,25 @@ export default function UserManagement() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                Nom d'utilisateur *
+              </label>
+              <div className="relative">
+                <User className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  required
+                  placeholder="ex: amina_diop"
+                  value={formData.username}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, username: e.target.value }))
+                  }
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                 Adresse email *
@@ -214,7 +246,8 @@ export default function UserManagement() {
                   className="p-3 bg-white rounded-xl border border-gray-200/80 text-xs flex items-center justify-between shadow-2xs"
                 >
                   <div className="truncate mr-2">
-                    <p className="font-semibold text-gray-800 truncate">{u.email}</p>
+                    <p className="font-semibold text-gray-800 truncate">@{u.username}</p>
+                    <p className="text-[11px] text-gray-500 truncate">{u.email}</p>
                     <p className="text-[10px] text-gray-400">{u.timestamp}</p>
                   </div>
                   <span

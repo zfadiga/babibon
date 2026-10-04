@@ -70,15 +70,23 @@ function saveStoredCandies(candies: Candy[]): void {
 }
 
 function getStoredOrders(): Order[] {
-  if (typeof window === 'undefined') return INITIAL_MOCK_ORDERS as unknown as Order[];
+  if (typeof window === 'undefined') return [];
   try {
     const saved = localStorage.getItem('bonbon_orders');
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) {
+        const filtered = parsed.filter(
+          (o: any) => !['CMD-9042', 'CMD-9043', 'CMD-9044'].includes(String(o?.id))
+        );
+        if (filtered.length !== parsed.length) {
+          localStorage.setItem('bonbon_orders', JSON.stringify(filtered));
+        }
+        return filtered;
+      }
     }
   } catch {}
-  return INITIAL_MOCK_ORDERS as unknown as Order[];
+  return [];
 }
 
 function saveStoredOrders(orders: Order[]): void {
@@ -203,7 +211,7 @@ export async function fetchOrders(): Promise<Order[]> {
         .select('*, items:order_items(*)')
         .order('created_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         return data;
       }
     } catch (e) {
@@ -267,11 +275,31 @@ export async function createNewUser(payload: CreateUserPayload): Promise<{ succe
         email: payload.email,
         password: payload.password,
         options: {
-          data: { role: payload.role },
+          data: {
+            username: payload.username,
+            role: payload.role,
+          },
         },
       });
 
       if (error) throw error;
+
+      // Upsert profile in Supabase profiles table if available
+      if (data.user?.id) {
+        try {
+          await supabase.from('profiles').upsert([
+            {
+              id: data.user.id,
+              username: payload.username,
+              email: payload.email,
+              role: payload.role,
+            },
+          ]);
+        } catch (pErr) {
+          console.warn('Profile table insert notice:', pErr);
+        }
+      }
+
       return { success: true, user: data.user };
     } catch (err: any) {
       throw new Error(err.message || 'Failed to create user in Supabase');
@@ -281,8 +309,8 @@ export async function createNewUser(payload: CreateUserPayload): Promise<{ succe
   // Mock mode user simulation
   return {
     success: true,
-    message: `(Mock Mode) Compte utilisateur simulé créé avec succès pour ${payload.email} (${payload.role}).`,
-    user: { email: payload.email, role: payload.role, id: `mock-${Date.now()}` },
+    message: `(Mock Mode) Compte utilisateur simulé créé avec succès pour @${payload.username} (${payload.email} - ${payload.role}).`,
+    user: { username: payload.username, email: payload.email, role: payload.role, id: `mock-${Date.now()}` },
   };
 }
 

@@ -45,6 +45,7 @@ export type Order = {
 
 export interface UserProfile {
   id: string;
+  username?: string;
   email?: string;
   role: 'admin' | 'customer' | string;
   created_at?: string;
@@ -60,6 +61,7 @@ export interface NewCandyPayload {
 }
 
 export interface CreateUserPayload {
+  username: string;
   email: string;
   password: string;
   role: 'admin' | 'customer';

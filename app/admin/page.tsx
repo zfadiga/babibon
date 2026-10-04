@@ -66,7 +66,7 @@ export default function AdminDashboardPage() {
           {/* TAB 3: ACCOUNT CREDENTIALS & USER MANAGEMENT */}
           {activeTab === 'settings' && (
             <div className="space-y-8 animate-fade-in">
-              {/* Admin login credentials update (email & password) */}
+              {/* Admin login credentials update (username & password) */}
               <AccountSettings />
 
               {/* Add / create new user with role */}
