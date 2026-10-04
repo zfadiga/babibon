@@ -79,15 +79,35 @@ export function normalizeStatus(
   rawStatus?: string
 ): 'pending' | 'processing' | 'completed' | 'cancelled' {
   const s = (rawStatus || '').toLowerCase().trim();
-  if (s === 'completed' || s === 'delivered') return 'completed';
+  if (
+    s === 'completed' ||
+    s === 'delivered' ||
+    s === 'livree' ||
+    s === 'livrée' ||
+    s === 'livre'
+  ) {
+    return 'completed';
+  }
   if (
     s === 'processing' ||
     s === 'preparing' ||
     s === 'delivering' ||
-    s === 'in_progress'
-  )
+    s === 'in_progress' ||
+    s === 'en_cours' ||
+    s === 'en cours' ||
+    s === 'en-cours'
+  ) {
     return 'processing';
-  if (s === 'cancelled' || s === 'canceled') return 'cancelled';
+  }
+  if (
+    s === 'cancelled' ||
+    s === 'canceled' ||
+    s === 'annulee' ||
+    s === 'annulée' ||
+    s === 'annule'
+  ) {
+    return 'cancelled';
+  }
   return 'pending';
 }
 
@@ -281,99 +301,160 @@ export default function OrdersTable() {
       name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       email.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const status = (order.status || '').toLowerCase();
+    const norm = normalizeStatus(order.status);
     let matchesStatus = true;
-    if (statusFilter === 'pending') {
-      matchesStatus = status === 'pending';
-    } else if (statusFilter === 'processing') {
-      matchesStatus =
-        status === 'processing' ||
-        status === 'preparing' ||
-        status === 'delivering' ||
-        status === 'in_progress';
-    } else if (statusFilter === 'completed') {
-      matchesStatus = status === 'completed' || status === 'delivered';
-    } else if (statusFilter === 'cancelled') {
-      matchesStatus = status === 'cancelled';
+    if (statusFilter !== 'all') {
+      matchesStatus = norm === statusFilter;
     }
 
     return matchesSearch && matchesStatus;
   });
 
-  // KPI Metrics (Calculated dynamically from safeOrders)
+  // KPI Metrics (Calculated dynamically from safeOrders in real-time)
   const totalRevenue = safeOrders
-    .filter((o) => (o.status || '').toLowerCase() !== 'cancelled')
+    .filter((o) => normalizeStatus(o.status) !== 'cancelled')
     .reduce(
       (acc, curr) => acc + (curr.total_amount ?? curr.totalAmount ?? 0),
       0
     );
   const pendingCount = safeOrders.filter(
-    (o) => (o.status || '').toLowerCase() === 'pending'
+    (o) => normalizeStatus(o.status) === 'pending'
   ).length;
-  const completedCount = safeOrders.filter((o) => {
-    const s = (o.status || '').toLowerCase();
-    return s === 'completed' || s === 'delivered';
-  }).length;
+  const inProgressCount = safeOrders.filter(
+    (o) => normalizeStatus(o.status) === 'processing'
+  ).length;
+  const completedCount = safeOrders.filter(
+    (o) => normalizeStatus(o.status) === 'completed'
+  ).length;
+  const cancelledCount = safeOrders.filter(
+    (o) => normalizeStatus(o.status) === 'cancelled'
+  ).length;
 
   const activeOrderForMenu = safeOrders.find((o) => o.id === openStatusMenuId);
 
   return (
     <div className="space-y-6">
-      {/* Top Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Orders */}
-        <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex items-center space-x-4">
-          <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
-            <ShoppingBag className="w-6 h-6" />
+      {/* Top Stats Cards (6 KPIs) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5 sm:gap-4">
+        {/* 1. Total Commandes */}
+        <button
+          type="button"
+          onClick={() => setStatusFilter('all')}
+          className={`bg-white p-4 sm:p-5 rounded-3xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'all'
+              ? 'border-purple-300 ring-2 ring-purple-100 shadow-md'
+              : 'border-gray-100 shadow-xs hover:border-purple-200 hover:shadow-sm'
+          } flex items-center space-x-3.5`}
+        >
+          <div className="w-11 h-11 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+            <ShoppingBag className="w-5 h-5" />
           </div>
-          <div>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider truncate">
               Total Commandes
             </p>
-            <p className="text-2xl font-bold text-gray-900">{safeOrders.length}</p>
+            <p className="text-xl sm:text-2xl font-bold text-gray-900">{safeOrders.length}</p>
           </div>
-        </div>
+        </button>
 
-        {/* Total Revenue */}
-        <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex items-center space-x-4">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-            <TrendingUp className="w-6 h-6" />
+        {/* 2. Chiffre d'Affaires */}
+        <div className="bg-white p-4 sm:p-5 rounded-3xl border border-gray-100 shadow-xs flex items-center space-x-3.5">
+          <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <TrendingUp className="w-5 h-5" />
           </div>
-          <div>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider truncate">
               Chiffre d'Affaires
             </p>
-            <p className="text-xl font-bold text-emerald-600">
+            <p className="text-lg sm:text-xl font-bold text-emerald-600 truncate">
               {formatPrice(totalRevenue)}
             </p>
           </div>
         </div>
 
-        {/* Pending */}
-        <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex items-center space-x-4">
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
-            <Clock className="w-6 h-6" />
+        {/* 3. En attente */}
+        <button
+          type="button"
+          onClick={() => setStatusFilter(statusFilter === 'pending' ? 'all' : 'pending')}
+          className={`bg-white p-4 sm:p-5 rounded-3xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'pending'
+              ? 'border-amber-300 ring-2 ring-amber-100 shadow-md'
+              : 'border-gray-100 shadow-xs hover:border-amber-200 hover:shadow-sm'
+          } flex items-center space-x-3.5`}
+        >
+          <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+            <Clock className="w-5 h-5" />
           </div>
-          <div>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider truncate">
               En Attente
             </p>
-            <p className="text-2xl font-bold text-amber-600">{pendingCount}</p>
+            <p className="text-xl sm:text-2xl font-bold text-amber-600">{pendingCount}</p>
           </div>
-        </div>
+        </button>
 
-        {/* Completed */}
-        <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex items-center space-x-4">
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
-            <CheckCircle className="w-6 h-6" />
+        {/* 4. En cours */}
+        <button
+          type="button"
+          onClick={() => setStatusFilter(statusFilter === 'processing' ? 'all' : 'processing')}
+          className={`bg-white p-4 sm:p-5 rounded-3xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'processing'
+              ? 'border-blue-300 ring-2 ring-blue-100 shadow-md'
+              : 'border-gray-100 shadow-xs hover:border-blue-200 hover:shadow-sm'
+          } flex items-center space-x-3.5`}
+        >
+          <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <RefreshCw className="w-5 h-5" />
           </div>
-          <div>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider truncate">
+              En Cours
+            </p>
+            <p className="text-xl sm:text-2xl font-bold text-blue-600">{inProgressCount}</p>
+          </div>
+        </button>
+
+        {/* 5. Livrées avec succès */}
+        <button
+          type="button"
+          onClick={() => setStatusFilter(statusFilter === 'completed' ? 'all' : 'completed')}
+          className={`bg-white p-4 sm:p-5 rounded-3xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'completed'
+              ? 'border-teal-300 ring-2 ring-teal-100 shadow-md'
+              : 'border-gray-100 shadow-xs hover:border-teal-200 hover:shadow-sm'
+          } flex items-center space-x-3.5`}
+        >
+          <div className="w-11 h-11 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+            <CheckCircle className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider truncate">
               Livrées avec succès
             </p>
-            <p className="text-2xl font-bold text-blue-600">{completedCount}</p>
+            <p className="text-xl sm:text-2xl font-bold text-teal-600">{completedCount}</p>
           </div>
-        </div>
+        </button>
+
+        {/* 6. Annulées */}
+        <button
+          type="button"
+          onClick={() => setStatusFilter(statusFilter === 'cancelled' ? 'all' : 'cancelled')}
+          className={`bg-white p-4 sm:p-5 rounded-3xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'cancelled'
+              ? 'border-rose-300 ring-2 ring-rose-100 shadow-md'
+              : 'border-gray-100 shadow-xs hover:border-rose-200 hover:shadow-sm'
+          } flex items-center space-x-3.5`}
+        >
+          <div className="w-11 h-11 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+            <XCircle className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider truncate">
+              Annulées
+            </p>
+            <p className="text-xl sm:text-2xl font-bold text-rose-600">{cancelledCount}</p>
+          </div>
+        </button>
       </div>
 
       {/* Main Table Container: overflow-visible ensures no clipping */}
