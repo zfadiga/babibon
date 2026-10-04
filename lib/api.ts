@@ -266,6 +266,88 @@ export async function submitOrder(order: OrderRecord): Promise<{ success: boolea
 }
 
 /**
+ * Update order status (Supabase + localStorage fallback)
+ */
+export async function updateOrderStatus(
+  orderId: string | number,
+  status: string
+): Promise<{ success: boolean; message?: string }> {
+  if (isSupabaseConfigured) {
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status })
+        .eq('id', orderId);
+
+      if (error) {
+        console.warn('Supabase updateOrderStatus error:', error);
+      }
+    } catch (e) {
+      console.warn('Supabase updateOrderStatus exception:', e);
+    }
+  }
+
+  // Update in localStorage
+  if (typeof window !== 'undefined') {
+    try {
+      const current = getStoredOrders();
+      const updated = current.map((order) =>
+        String(order.id) === String(orderId) ? { ...order, status } : order
+      );
+      saveStoredOrders(updated);
+    } catch (e) {
+      console.warn('localStorage updateOrderStatus error:', e);
+    }
+  }
+
+  return { success: true };
+}
+
+/**
+ * Delete an order by ID (Supabase + localStorage fallback)
+ */
+export async function deleteOrder(
+  orderId: string | number
+): Promise<{ success: boolean; message?: string }> {
+  if (isSupabaseConfigured) {
+    try {
+      // Delete child order_items if foreign key relationship exists
+      try {
+        await supabase.from('order_items').delete().eq('order_id', orderId);
+      } catch (itemErr) {
+        console.warn('order_items cascade delete notice:', itemErr);
+      }
+
+      const { error } = await supabase
+        .from('orders')
+        .delete()
+        .eq('id', orderId);
+
+      if (error) {
+        console.warn('Supabase deleteOrder error:', error);
+      }
+    } catch (e) {
+      console.warn('Supabase deleteOrder exception:', e);
+    }
+  }
+
+  // Remove from localStorage
+  if (typeof window !== 'undefined') {
+    try {
+      const current = getStoredOrders();
+      const updated = current.filter(
+        (order) => String(order.id) !== String(orderId)
+      );
+      saveStoredOrders(updated);
+    } catch (e) {
+      console.warn('localStorage deleteOrder error:', e);
+    }
+  }
+
+  return { success: true };
+}
+
+/**
  * Admin action: create new user
  */
 export async function createNewUser(payload: CreateUserPayload): Promise<{ success: boolean; message?: string; user?: any }> {
