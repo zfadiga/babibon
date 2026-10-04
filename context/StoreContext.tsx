@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { CandyProduct, CartItem, ChildUser, StoreSettings, OrderRecord } from '@/types/candy';
 import { DEFAULT_CANDIES, DEFAULT_STORE_SETTINGS, INITIAL_MOCK_ORDERS } from '@/data/defaultCandies';
-import { submitOrder, fetchCandies } from '@/lib/api';
+import { submitOrder, fetchCandies, updateOrderStatus } from '@/lib/api';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 interface StoreContextType {
@@ -22,6 +22,7 @@ interface StoreContextType {
   toggleCurrency: () => void;
   orders: OrderRecord[];
   placeOrder: (order: OrderRecord) => Promise<void>;
+  cancelOrder: (orderId: string | number) => Promise<boolean>;
   // UI Modals State
   isCartDrawerOpen: boolean;
   setIsCartDrawerOpen: (open: boolean) => void;
@@ -329,6 +330,43 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch {}
   };
 
+  // Realtime synchronization on orders table
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    const channel = supabase
+      .channel('store_realtime_orders')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders' },
+        (payload) => {
+          if (payload.eventType === 'UPDATE' && payload.new) {
+            setOrders((prev) =>
+              prev.map((o) =>
+                String(o.id) === String(payload.new.id)
+                  ? { ...o, status: payload.new.status }
+                  : o
+              )
+            );
+          } else if (payload.eventType === 'DELETE' && payload.old) {
+            setOrders((prev) =>
+              prev.filter((o) => String(o.id) !== String(payload.old.id))
+            );
+          } else if (payload.eventType === 'INSERT' && payload.new) {
+            setOrders((prev) => {
+              if (prev.some((o) => String(o.id) === String(payload.new.id))) return prev;
+              return [payload.new as OrderRecord, ...prev];
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const placeOrder = async (order: OrderRecord) => {
     const enrichedOrder: OrderRecord = {
       ...order,
@@ -340,6 +378,26 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (res.success) {
       setOrders((prev) => [res.order, ...prev]);
       clearCart();
+    }
+  };
+
+  const cancelOrder = async (orderId: string | number): Promise<boolean> => {
+    // Optimistic local update
+    setOrders((prev) =>
+      prev.map((o) =>
+        String(o.id) === String(orderId) ? { ...o, status: 'cancelled' } : o
+      )
+    );
+
+    try {
+      const res = await updateOrderStatus(orderId, 'cancelled');
+      if (res && res.success === false) {
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.warn('cancelOrder error:', e);
+      return false;
     }
   };
 
@@ -361,6 +419,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         toggleCurrency,
         orders,
         placeOrder,
+        cancelOrder,
         isCartDrawerOpen,
         setIsCartDrawerOpen,
         isLoginOpen,

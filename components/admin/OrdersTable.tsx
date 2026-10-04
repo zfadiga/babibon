@@ -117,8 +117,8 @@ export default function OrdersTable() {
     setMounted(true);
   }, []);
 
-  const loadOrders = async () => {
-    setLoading(true);
+  const loadOrders = async (silent = false) => {
+    if (!silent) setLoading(true);
     setErrorMsg(null);
     try {
       const data = await fetchOrders();
@@ -128,7 +128,7 @@ export default function OrdersTable() {
         err.message || 'Impossible de récupérer les commandes clients.'
       );
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -166,8 +166,37 @@ export default function OrdersTable() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'orders' },
-        () => {
-          loadOrders();
+        (payload: any) => {
+          // Immediately reflect status updates in local state for instantaneous counter updates
+          if (payload.eventType === 'UPDATE' && payload.new) {
+            setOrders((prev) =>
+              prev.map((o) =>
+                String(o.id) === String(payload.new.id)
+                  ? {
+                      ...o,
+                      status: payload.new.status,
+                      customer_name: payload.new.customer_name || o.customer_name,
+                      deliveryAddress: payload.new.delivery_address || o.deliveryAddress,
+                      customerPhone: payload.new.customer_phone || o.customerPhone,
+                      total_amount:
+                        payload.new.total_amount != null
+                          ? Number(payload.new.total_amount)
+                          : o.total_amount,
+                      totalAmount:
+                        payload.new.total_amount != null
+                          ? Number(payload.new.total_amount)
+                          : o.totalAmount,
+                    }
+                  : o
+              )
+            );
+          } else if (payload.eventType === 'DELETE' && payload.old) {
+            setOrders((prev) =>
+              prev.filter((o) => String(o.id) !== String(payload.old.id))
+            );
+          }
+          // Also perform background silent refresh to guarantee complete consistency
+          loadOrders(true);
         }
       )
       .subscribe();
@@ -394,7 +423,7 @@ export default function OrdersTable() {
 
             {/* Refresh */}
             <button
-              onClick={loadOrders}
+              onClick={() => loadOrders(false)}
               disabled={loading}
               className="p-2 text-gray-600 hover:text-rose-600 hover:bg-rose-50 rounded-xl border border-gray-200 transition-colors disabled:opacity-50 cursor-pointer"
               title="Actualiser"

@@ -281,9 +281,11 @@ export async function updateOrderStatus(
 
       if (error) {
         console.warn('Supabase updateOrderStatus error:', error);
+        return { success: false, message: error.message };
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Supabase updateOrderStatus exception:', e);
+      return { success: false, message: e.message || 'Erreur réseau Supabase' };
     }
   }
 
@@ -301,6 +303,15 @@ export async function updateOrderStatus(
   }
 
   return { success: true };
+}
+
+/**
+ * Cancel an order (client user action)
+ */
+export async function cancelUserOrder(
+  orderId: string | number
+): Promise<{ success: boolean; message?: string }> {
+  return updateOrderStatus(orderId, 'cancelled');
 }
 
 /**
