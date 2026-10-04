@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Order } from '@/types';
 import { fetchOrders, updateOrderStatus, deleteOrder } from '@/lib/api';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
@@ -97,18 +98,24 @@ export default function OrdersTable() {
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [mounted, setMounted] = useState(false);
 
-  // Interactive status dropdown state
-  const [openStatusMenuId, setOpenStatusMenuId] = useState<
-    string | number | null
-  >(null);
-  const [updatingStatusId, setUpdatingStatusId] = useState<
-    string | number | null
-  >(null);
+  // Interactive status dropdown state with portal coordinates
+  const [openStatusMenuId, setOpenStatusMenuId] = useState<string | number | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{
+    top: number;
+    left: number;
+    openUpwards: boolean;
+  } | null>(null);
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | number | null>(null);
 
   // Deletion modal state
   const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const loadOrders = async () => {
     setLoading(true);
@@ -125,13 +132,27 @@ export default function OrdersTable() {
     }
   };
 
-  // Close status dropdown menu when clicking anywhere outside
+  // Close status dropdown menu when clicking anywhere outside or scrolling
   useEffect(() => {
     const handleClickOutside = () => {
       setOpenStatusMenuId(null);
+      setMenuPosition(null);
     };
+
+    const handleScrollOrResize = () => {
+      setOpenStatusMenuId(null);
+      setMenuPosition(null);
+    };
+
     window.addEventListener('click', handleClickOutside);
-    return () => window.removeEventListener('click', handleClickOutside);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+
+    return () => {
+      window.removeEventListener('click', handleClickOutside);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
   }, []);
 
   // Initial load + Supabase Realtime subscription
@@ -162,6 +183,7 @@ export default function OrdersTable() {
     newStatus: string
   ) => {
     setOpenStatusMenuId(null);
+    setMenuPosition(null);
     setUpdatingStatusId(orderId);
     setErrorMsg(null);
 
@@ -264,6 +286,8 @@ export default function OrdersTable() {
     return s === 'completed' || s === 'delivered';
   }).length;
 
+  const activeOrderForMenu = safeOrders.find((o) => o.id === openStatusMenuId);
+
   return (
     <div className="space-y-6">
       {/* Top Stats Cards */}
@@ -323,8 +347,8 @@ export default function OrdersTable() {
         </div>
       </div>
 
-      {/* Main Table Container */}
-      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+      {/* Main Table Container: overflow-visible ensures no clipping */}
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-100">
         {/* Controls */}
         <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -402,8 +426,8 @@ export default function OrdersTable() {
           </div>
         )}
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Table wrapper with min-height */}
+        <div className="overflow-x-auto min-h-[300px]">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50/80 border-b border-gray-100 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
@@ -439,6 +463,7 @@ export default function OrdersTable() {
                   const normStatus = normalizeStatus(order.status);
                   const cfg = ORDER_STATUS_CONFIG[normStatus];
                   const StatusIcon = cfg.icon;
+                  const isMenuOpen = openStatusMenuId === order.id;
 
                   return (
                     <tr key={order.id} className="hover:bg-gray-50/50 transition-colors">
@@ -504,83 +529,43 @@ export default function OrdersTable() {
 
                       {/* Interactive Status Selector */}
                       <td className="py-4 px-6" onClick={(e) => e.stopPropagation()}>
-                        <div className="relative inline-block text-left">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenStatusMenuId(
-                                openStatusMenuId === order.id ? null : order.id
-                              );
-                            }}
-                            disabled={updatingStatusId === order.id}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 ${cfg.badgeBg} ${cfg.border} ${cfg.badgeText} ${cfg.hoverBg}`}
-                            title="Cliquer pour changer le statut instantanément"
-                          >
-                            {updatingStatusId === order.id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-current" />
-                            ) : (
-                              <StatusIcon className="w-3.5 h-3.5" />
-                            )}
-                            <span>{cfg.label}</span>
-                            <ChevronDown
-                              className={`w-3.5 h-3.5 opacity-60 transition-transform ${
-                                openStatusMenuId === order.id ? 'rotate-180' : ''
-                              }`}
-                            />
-                          </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (openStatusMenuId === order.id) {
+                              setOpenStatusMenuId(null);
+                              setMenuPosition(null);
+                              return;
+                            }
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const dropdownHeight = 175;
+                            const spaceBelow = window.innerHeight - rect.bottom;
+                            const openUpwards = spaceBelow < dropdownHeight && rect.top > dropdownHeight;
+                            const top = openUpwards
+                              ? rect.top - dropdownHeight - 6
+                              : rect.bottom + 6;
+                            const left = Math.max(12, Math.min(rect.left, window.innerWidth - 204));
 
-                          {/* Status Options Dropdown */}
-                          {openStatusMenuId === order.id && (
-                            <div
-                              className="absolute left-0 mt-1.5 w-48 rounded-2xl bg-white shadow-xl border border-gray-100 py-1.5 ring-1 ring-black/5 z-50 animate-in fade-in zoom-in-95 duration-100"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 border-b border-gray-50 mb-1">
-                                Statut de la commande
-                              </div>
-                              {(
-                                [
-                                  'pending',
-                                  'processing',
-                                  'completed',
-                                  'cancelled',
-                                ] as const
-                              ).map((key) => {
-                                const opt = ORDER_STATUS_CONFIG[key];
-                                const isSelected = normStatus === key;
-                                const OptIcon = opt.icon;
-                                return (
-                                  <button
-                                    key={key}
-                                    type="button"
-                                    onClick={() =>
-                                      handleStatusChange(order.id, key)
-                                    }
-                                    className={`w-full px-3 py-2 text-xs flex items-center justify-between transition-colors hover:bg-gray-50 cursor-pointer ${
-                                      isSelected
-                                        ? 'font-bold text-gray-900 bg-gray-50/80'
-                                        : 'text-gray-600'
-                                    }`}
-                                  >
-                                    <span className="flex items-center gap-2">
-                                      <span
-                                        className={`w-2 h-2 rounded-full ${opt.dotColor}`}
-                                      />
-                                      <OptIcon
-                                        className={`w-3.5 h-3.5 ${opt.badgeText}`}
-                                      />
-                                      <span>{opt.label}</span>
-                                    </span>
-                                    {isSelected && (
-                                      <Check className="w-3.5 h-3.5 text-rose-600" />
-                                    )}
-                                  </button>
-                                );
-                              })}
-                            </div>
+                            setMenuPosition({ top, left, openUpwards });
+                            setOpenStatusMenuId(order.id);
+                          }}
+                          disabled={updatingStatusId === order.id}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 ${cfg.badgeBg} ${cfg.border} ${cfg.badgeText} ${cfg.hoverBg}`}
+                          title="Cliquer pour changer le statut instantanément"
+                        >
+                          {updatingStatusId === order.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-current" />
+                          ) : (
+                            <StatusIcon className="w-3.5 h-3.5" />
                           )}
-                        </div>
+                          <span>{cfg.label}</span>
+                          <ChevronDown
+                            className={`w-3.5 h-3.5 opacity-60 transition-transform ${
+                              isMenuOpen ? 'rotate-180' : ''
+                            }`}
+                          />
+                        </button>
                       </td>
 
                       {/* Delete Action Button */}
@@ -602,6 +587,49 @@ export default function OrdersTable() {
           </table>
         </div>
       </div>
+
+      {/* Portal Dropdown Menu: completely escapes all overflow-hidden and overflow-x-auto containers */}
+      {mounted && openStatusMenuId && menuPosition && activeOrderForMenu && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            top: `${menuPosition.top}px`,
+            left: `${menuPosition.left}px`,
+            zIndex: 99999,
+          }}
+          className="w-48 rounded-2xl bg-white shadow-2xl border border-gray-100 py-1.5 ring-1 ring-black/10 animate-in fade-in zoom-in-95 duration-100"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 border-b border-gray-50 mb-1">
+            Statut de la commande
+          </div>
+          {(['pending', 'processing', 'completed', 'cancelled'] as const).map((key) => {
+            const opt = ORDER_STATUS_CONFIG[key];
+            const isSelected = normalizeStatus(activeOrderForMenu.status) === key;
+            const OptIcon = opt.icon;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => handleStatusChange(activeOrderForMenu.id, key)}
+                className={`w-full px-3 py-2 text-xs flex items-center justify-between transition-colors hover:bg-gray-50 cursor-pointer ${
+                  isSelected
+                    ? 'font-bold text-gray-900 bg-gray-50/80'
+                    : 'text-gray-600'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${opt.dotColor}`} />
+                  <OptIcon className={`w-3.5 h-3.5 ${opt.badgeText}`} />
+                  <span>{opt.label}</span>
+                </span>
+                {isSelected && <Check className="w-3.5 h-3.5 text-rose-600" />}
+              </button>
+            );
+          })}
+        </div>,
+        document.body
+      )}
 
       {/* Delete Confirmation Modal */}
       {orderToDelete && (
