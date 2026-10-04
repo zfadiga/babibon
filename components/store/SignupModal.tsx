@@ -9,7 +9,7 @@ import { useStore } from '@/context/StoreContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 export const SignupModal: React.FC = () => {
-  const { isSignupOpen, setIsSignupOpen, setIsLoginOpen, loginUser } = useStore();
+  const { isSignupOpen, setIsSignupOpen, setIsLoginOpen, loginUser, pendingCandyToAdd } = useStore();
   const [firstName, setFirstName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -178,6 +178,20 @@ export const SignupModal: React.FC = () => {
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+          {pendingCandyToAdd && (
+            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-pink-50 to-rose-50 border border-pink-200 text-pink-900 text-xs flex items-center gap-2.5">
+              <span className="text-xl shrink-0">🍬</span>
+              <div className="flex-1 min-w-0">
+                <span className="font-bold block text-pink-700">
+                  Création de compte requise pour ajouter ce bonbon :
+                </span>
+                <span className="font-candy font-bold truncate block text-slate-800">
+                  {pendingCandyToAdd.candy.name} (x{pendingCandyToAdd.quantity})
+                </span>
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2.5">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />

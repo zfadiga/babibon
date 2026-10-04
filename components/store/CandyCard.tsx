@@ -33,7 +33,6 @@ export const CandyCard: React.FC<CandyCardProps> = ({
 
   const handleAdd = () => {
     setIsBouncing(true);
-    fireCandyConfetti();
     onAddToCart(candy);
     setTimeout(() => setIsBouncing(false), 300);
   };

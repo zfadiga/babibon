@@ -100,6 +100,12 @@ export default function CandyForm({ onCandyAdded }: CandyFormProps) {
     setErrorMsg(null);
 
     try {
+      // Authentication Guard check for adding candy to catalog
+      const adminSession = typeof window !== 'undefined' ? localStorage.getItem('bonbon_admin_session') : null;
+      if (!adminSession) {
+        throw new Error('Veuillez vous connecter pour ajouter un bonbon au catalogue.');
+      }
+
       if (!formData.name.trim()) throw new Error('Le nom du bonbon est obligatoire.');
       if (formData.price <= 0) throw new Error('Le prix doit être supérieur à 0.');
 

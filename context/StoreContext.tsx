@@ -5,6 +5,7 @@ import { CandyProduct, CartItem, ChildUser, StoreSettings, OrderRecord } from '@
 import { DEFAULT_CANDIES, DEFAULT_STORE_SETTINGS, INITIAL_MOCK_ORDERS } from '@/data/defaultCandies';
 import { submitOrder, fetchCandies, updateOrderStatus } from '@/lib/api';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { fireCandyConfetti } from '@/utils/formatters';
 
 interface StoreContextType {
   candies: CandyProduct[];
@@ -13,7 +14,7 @@ interface StoreContextType {
   currentUser: ChildUser | null;
   setCurrentUser: React.Dispatch<React.SetStateAction<ChildUser | null>>;
   cart: CartItem[];
-  addToCart: (candy: CandyProduct, quantity?: number) => void;
+  addToCart: (candy: CandyProduct, quantity?: number) => boolean;
   updateQuantity: (candyId: string | number, delta: number) => void;
   removeFromCart: (candyId: string | number) => void;
   clearCart: () => void;
@@ -40,6 +41,15 @@ interface StoreContextType {
   loginUser: (user: ChildUser) => void;
   logoutUser: () => void;
   updateUserProfile: (user: ChildUser) => void;
+  // Protection Guard for adding candy
+  isAuthRequiredModalOpen: boolean;
+  setIsAuthRequiredModalOpen: (open: boolean) => void;
+  pendingCandyToAdd: { candy: CandyProduct; quantity: number } | null;
+  setPendingCandyToAdd: React.Dispatch<React.SetStateAction<{ candy: CandyProduct; quantity: number } | null>>;
+  authPromptMessage: string | null;
+  setAuthPromptMessage: (msg: string | null) => void;
+  successToast: string | null;
+  setSuccessToast: (msg: string | null) => void;
 }
 
 const StoreContext = createContext<StoreContextType | null>(null);
@@ -132,6 +142,21 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
   const [selectedCandyForDetails, setSelectedCandyForDetails] = useState<CandyProduct | null>(null);
+
+  // Protection Guard states for adding candy
+  const [isAuthRequiredModalOpen, setIsAuthRequiredModalOpen] = useState(false);
+  const [pendingCandyToAdd, setPendingCandyToAdd] = useState<{ candy: CandyProduct; quantity: number } | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const saved = localStorage.getItem('bonbon_pending_candy');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return null;
+  });
+  const [authPromptMessage, setAuthPromptMessage] = useState<string | null>(
+    'Veuillez vous connecter ou créer un compte pour ajouter un bonbon'
+  );
+  const [successToast, setSuccessToast] = useState<string | null>(null);
 
   // Sync state to localStorage
   useEffect(() => {
@@ -229,23 +254,62 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   // Cart operations
-  const addToCart = (candy: CandyProduct, quantityToAdd: number = 1) => {
+  const addToCart = (candy: CandyProduct, quantityToAdd: number = 1): boolean => {
+    // 1. Authentication Guard: Check if a user is currently logged in before allowing them to add a candy
+    if (!currentUser) {
+      const pending = { candy, quantity: quantityToAdd };
+      setPendingCandyToAdd(pending);
+      try {
+        localStorage.setItem('bonbon_pending_candy', JSON.stringify(pending));
+      } catch {}
+
+      setAuthPromptMessage('Veuillez vous connecter ou créer un compte pour ajouter un bonbon');
+      setIsAuthRequiredModalOpen(true);
+      return false;
+    }
+
+    // 2. Normal add to cart for authenticated users
+    fireCandyConfetti();
     setCart((prev) => {
       const existing = prev.find((item) => String(item.candy.id) === String(candy.id));
+      let nextCart: CartItem[];
       if (existing) {
-        return prev.map((item) =>
+        nextCart = prev.map((item) =>
           String(item.candy.id) === String(candy.id)
             ? { ...item, quantity: item.quantity + quantityToAdd }
             : item
         );
+      } else {
+        nextCart = [...prev, { candy, quantity: quantityToAdd }];
       }
-      return [...prev, { candy, quantity: quantityToAdd }];
+
+      if (currentUser?.id) {
+        try {
+          localStorage.setItem(`bonbon_cart_${currentUser.id}`, JSON.stringify(nextCart));
+        } catch {}
+      }
+      return nextCart;
     });
+
+    setSuccessToast(`🍬 "${candy.name}" a été ajouté à votre panier !`);
+    setTimeout(() => {
+      setSuccessToast((curr) => (curr?.includes(candy.name) ? null : curr));
+    }, 3500);
+
+    return true;
   };
 
   const updateQuantity = (candyId: string | number, delta: number) => {
-    setCart((prev) =>
-      prev
+    if (!currentUser) {
+      const candy = candies.find((c) => String(c.id) === String(candyId));
+      if (candy && delta > 0) {
+        addToCart(candy, delta);
+      }
+      return;
+    }
+
+    setCart((prev) => {
+      const nextCart = prev
         .map((item) => {
           if (String(item.candy.id) === String(candyId)) {
             const nextQty = item.quantity + delta;
@@ -253,16 +317,36 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           }
           return item;
         })
-        .filter(Boolean) as CartItem[]
-    );
+        .filter(Boolean) as CartItem[];
+
+      if (currentUser?.id) {
+        try {
+          localStorage.setItem(`bonbon_cart_${currentUser.id}`, JSON.stringify(nextCart));
+        } catch {}
+      }
+      return nextCart;
+    });
   };
 
   const removeFromCart = (candyId: string | number) => {
-    setCart((prev) => prev.filter((item) => String(item.candy.id) !== String(candyId)));
+    setCart((prev) => {
+      const nextCart = prev.filter((item) => String(item.candy.id) !== String(candyId));
+      if (currentUser?.id) {
+        try {
+          localStorage.setItem(`bonbon_cart_${currentUser.id}`, JSON.stringify(nextCart));
+        } catch {}
+      }
+      return nextCart;
+    });
   };
 
   const clearCart = () => {
     setCart([]);
+    if (currentUser?.id) {
+      try {
+        localStorage.setItem(`bonbon_cart_${currentUser.id}`, JSON.stringify([]));
+      } catch {}
+    }
   };
 
   const toggleCurrency = () => {
@@ -282,13 +366,55 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       localStorage.setItem('bonbon_session_user_id', safeUser.id);
       localStorage.setItem('bonbon_current_user', JSON.stringify(safeUser));
+
       // Load this user's private cart
       const userCart = localStorage.getItem(`bonbon_cart_${safeUser.id}`);
+      let parsedCart: CartItem[] = [];
       if (userCart) {
-        setCart(JSON.parse(userCart));
-      } else {
-        setCart([]);
+        try {
+          parsedCart = JSON.parse(userCart);
+        } catch {}
       }
+
+      // Check if there was a pending candy action intercepted by the auth guard
+      let pending = pendingCandyToAdd;
+      if (!pending) {
+        const storedPending = localStorage.getItem('bonbon_pending_candy');
+        if (storedPending) {
+          try {
+            pending = JSON.parse(storedPending);
+          } catch {}
+        }
+      }
+
+      if (pending) {
+        const pendingItem = pending;
+        const existing = parsedCart.find(
+          (item) => String(item.candy.id) === String(pendingItem.candy.id)
+        );
+        if (existing) {
+          parsedCart = parsedCart.map((item) =>
+            String(item.candy.id) === String(pendingItem.candy.id)
+              ? { ...item, quantity: item.quantity + pendingItem.quantity }
+              : item
+          );
+        } else {
+          parsedCart = [...parsedCart, { candy: pendingItem.candy, quantity: pendingItem.quantity }];
+        }
+
+        // Save updated cart
+        localStorage.setItem(`bonbon_cart_${safeUser.id}`, JSON.stringify(parsedCart));
+        localStorage.removeItem('bonbon_pending_candy');
+        setPendingCandyToAdd(null);
+        fireCandyConfetti();
+        setSuccessToast(`🎉 Connexion réussie ! "${pendingItem.candy.name}" a été ajouté à votre panier !`);
+        setTimeout(() => setSuccessToast(null), 4500);
+      }
+
+      setCart(parsedCart);
+      setIsAuthRequiredModalOpen(false);
+      setIsLoginOpen(false);
+      setIsSignupOpen(false);
     } catch {}
   };
 
@@ -299,10 +425,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setCurrentUser(null);
     setCart([]);
     setIsProfileOpen(false);
+    setIsAuthRequiredModalOpen(false);
+    setPendingCandyToAdd(null);
     try {
       localStorage.removeItem('bonbon_current_user');
       localStorage.removeItem('bonbon_session_user_id');
       localStorage.removeItem('bonbon_cart_guest');
+      localStorage.removeItem('bonbon_pending_candy');
     } catch {}
   };
 
@@ -435,6 +564,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         loginUser,
         logoutUser,
         updateUserProfile,
+        isAuthRequiredModalOpen,
+        setIsAuthRequiredModalOpen,
+        pendingCandyToAdd,
+        setPendingCandyToAdd,
+        authPromptMessage,
+        setAuthPromptMessage,
+        successToast,
+        setSuccessToast,
       }}
     >
       {children}
