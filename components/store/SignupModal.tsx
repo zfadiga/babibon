@@ -6,6 +6,7 @@ import { ChildUser } from '@/types/candy';
 import { FUN_AVATARS } from '@/data/defaultCandies';
 import { fireCandyConfetti } from '@/utils/formatters';
 import { useStore } from '@/context/StoreContext';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 export const SignupModal: React.FC = () => {
   const { isSignupOpen, setIsSignupOpen, setIsLoginOpen, loginUser } = useStore();
@@ -21,7 +22,7 @@ export const SignupModal: React.FC = () => {
 
   if (!isSignupOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -54,7 +55,7 @@ export const SignupModal: React.FC = () => {
       const stored = localStorage.getItem('bonbon_registered_users');
       const users: ChildUser[] = stored ? JSON.parse(stored) : [];
 
-      // Check if username is already taken
+      // Check if username is already taken locally
       const userExists = users.some(
         (u) => u.username.toLowerCase() === cleanUsername.toLowerCase()
       );
@@ -63,8 +64,41 @@ export const SignupModal: React.FC = () => {
         return;
       }
 
+      let assignedId = `user-${Date.now()}`;
+
+      if (isSupabaseConfigured) {
+        try {
+          const userEmail = cleanUsername.includes('@')
+            ? cleanUsername
+            : `${cleanUsername.toLowerCase().replace(/[^a-z0-9]/g, '')}@babibon.local`;
+
+          const { data: authData, error: authError } = await supabase.auth.signUp({
+            email: userEmail,
+            password: cleanPassword,
+            options: {
+              data: {
+                full_name: cleanFirstName,
+                username: cleanUsername,
+                avatar: selectedAvatar.emoji,
+                avatarBg: selectedAvatar.bg,
+                favoriteFlavor,
+                phone: phone.trim() || undefined,
+                deliveryAddress: deliveryAddress.trim() || undefined,
+                role: 'customer',
+              },
+            },
+          });
+
+          if (authData?.user?.id) {
+            assignedId = authData.user.id;
+          }
+        } catch (authErr) {
+          console.warn('Supabase auth signup fallback:', authErr);
+        }
+      }
+
       const newUser: ChildUser = {
-        id: `user-${Date.now()}`,
+        id: assignedId,
         username: cleanUsername,
         password: cleanPassword,
         firstName: cleanFirstName,

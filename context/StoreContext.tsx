@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { CandyProduct, CartItem, ChildUser, StoreSettings, OrderRecord } from '@/types/candy';
 import { DEFAULT_CANDIES, DEFAULT_STORE_SETTINGS, INITIAL_MOCK_ORDERS } from '@/data/defaultCandies';
 import { submitOrder, fetchCandies } from '@/lib/api';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 interface StoreContextType {
   candies: CandyProduct[];
@@ -150,6 +151,49 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch {}
   }, [currentUser]);
 
+  // Synchronize active Supabase Auth session
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        const meta = session.user.user_metadata || {};
+        setCurrentUser((prev) => prev || {
+          id: session.user.id,
+          username: meta.username || session.user.email?.split('@')[0] || 'Client',
+          firstName: meta.full_name || meta.firstName || 'Client',
+          avatar: meta.avatar || '🐻',
+          avatarBg: meta.avatarBg || 'bg-pink-100 text-pink-700 border-pink-300',
+          favoriteFlavor: meta.favoriteFlavor || 'Fraise',
+          phone: meta.phone,
+          deliveryAddress: meta.deliveryAddress,
+          joinedAt: session.user.created_at || new Date().toISOString(),
+        });
+      }
+    }).catch(() => {});
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        const meta = session.user.user_metadata || {};
+        setCurrentUser({
+          id: session.user.id,
+          username: meta.username || session.user.email?.split('@')[0] || 'Client',
+          firstName: meta.full_name || meta.firstName || 'Client',
+          avatar: meta.avatar || '🐻',
+          avatarBg: meta.avatarBg || 'bg-pink-100 text-pink-700 border-pink-300',
+          favoriteFlavor: meta.favoriteFlavor || 'Fraise',
+          phone: meta.phone,
+          deliveryAddress: meta.deliveryAddress,
+          joinedAt: session.user.created_at || new Date().toISOString(),
+        });
+      }
+    });
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
@@ -240,6 +284,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const logoutUser = () => {
+    if (isSupabaseConfigured) {
+      supabase.auth.signOut().catch(() => {});
+    }
     setCurrentUser(null);
     setCart([]);
     setIsProfileOpen(false);

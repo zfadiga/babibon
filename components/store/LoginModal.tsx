@@ -5,6 +5,7 @@ import { X, LogIn, Sparkles, AlertCircle, Lock, User, KeyRound } from 'lucide-re
 import { ChildUser } from '@/types/candy';
 import { fireCandyConfetti } from '@/utils/formatters';
 import { useStore } from '@/context/StoreContext';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 export const LoginModal: React.FC = () => {
   const { isLoginOpen, setIsLoginOpen, setIsSignupOpen, loginUser } = useStore();
@@ -14,7 +15,7 @@ export const LoginModal: React.FC = () => {
 
   if (!isLoginOpen) return null;
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -23,13 +24,51 @@ export const LoginModal: React.FC = () => {
 
     // 1. Mandatory validation
     if (!cleanIdentifier) {
-      setError("Le nom d'utilisateur est obligatoire.");
+      setError("Le nom d'utilisateur ou l'email est obligatoire.");
       return;
     }
 
     if (!cleanPassword) {
       setError('Le mot de passe est obligatoire.');
       return;
+    }
+
+    // Try Supabase Auth first
+    if (isSupabaseConfigured) {
+      try {
+        const userEmail = cleanIdentifier.includes('@')
+          ? cleanIdentifier
+          : `${cleanIdentifier.toLowerCase().replace(/[^a-z0-9]/g, '')}@babibon.local`;
+
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email: userEmail,
+          password: cleanPassword,
+        });
+
+        if (!authError && authData?.user) {
+          const meta = authData.user.user_metadata || {};
+          const loggedUser: ChildUser = {
+            id: authData.user.id,
+            username: meta.username || cleanIdentifier,
+            firstName: meta.full_name || meta.firstName || cleanIdentifier,
+            avatar: meta.avatar || '🐻',
+            avatarBg: meta.avatarBg || 'bg-pink-100 text-pink-700 border-pink-300',
+            favoriteFlavor: meta.favoriteFlavor || 'Fraise',
+            phone: meta.phone,
+            deliveryAddress: meta.deliveryAddress,
+            joinedAt: authData.user.created_at || new Date().toISOString(),
+          };
+
+          fireCandyConfetti();
+          loginUser(loggedUser);
+          setIsLoginOpen(false);
+          setIdentifier('');
+          setPassword('');
+          return;
+        }
+      } catch (sbErr) {
+        console.warn('Supabase login notice:', sbErr);
+      }
     }
 
     try {
