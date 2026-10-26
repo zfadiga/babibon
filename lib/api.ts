@@ -120,15 +120,20 @@ export async function fetchCandies(): Promise<Candy[]> {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
-        return data.map((c: any) => ({
+      if (!error && Array.isArray(data)) {
+        const mapped = data.map((c: any) => ({
           ...c,
           image_url: c.image_url || c.imageUrl || '',
           imageUrl: c.imageUrl || c.image_url || '',
         }));
+        saveStoredCandies(mapped);
+        return mapped;
+      }
+      if (error) {
+        console.warn('Supabase candies fetch error:', error);
       }
     } catch (e) {
-      console.warn('Supabase candies fetch error:', e);
+      console.warn('Supabase candies fetch exception:', e);
     }
   }
 
@@ -140,41 +145,50 @@ export async function fetchCandies(): Promise<Candy[]> {
  * Create a new candy product
  */
 export async function createCandy(payload: NewCandyPayload): Promise<Candy> {
-  const newCandy: Candy = {
-    id: `candy-${Date.now()}`,
+  const flavorBadge = `${(payload.category || 'Bonbon').split(' ')[0]} ✨`;
+  const insertPayload = {
     name: payload.name,
     price: payload.price,
     description: payload.description,
     image_url: payload.image_url,
-    imageUrl: payload.image_url,
     stock: payload.stock,
     category: payload.category,
-    flavorBadge: `${payload.category.split(' ')[0]} ✨`,
-    badgeColor: 'bg-pink-100 text-pink-800 border-pink-200',
-    emojiIcon: '🍬',
-    created_at: new Date().toISOString(),
+    flavor_badge: flavorBadge,
+    badge_color: 'bg-pink-100 text-pink-800 border-pink-200',
+    emoji_icon: '🍬',
   };
 
   if (isSupabaseConfigured) {
-    try {
-      const { data, error } = await supabase
-        .from('candies')
-        .insert([payload])
-        .select()
-        .single();
+    const { data, error } = await supabase
+      .from('candies')
+      .insert([insertPayload])
+      .select()
+      .single();
 
-      if (!error && data) {
-        return {
-          ...data,
-          imageUrl: data.image_url,
-        };
-      }
-    } catch (e) {
-      console.warn('Supabase createCandy error:', e);
+    if (error) {
+      console.error('Supabase createCandy error:', error);
+      throw new Error(`Erreur Supabase: ${error.message}`);
+    }
+
+    if (data) {
+      const candy: Candy = {
+        ...data,
+        imageUrl: data.image_url,
+      };
+      const current = getStoredCandies();
+      const updated = [candy, ...current.filter((c) => String(c.id) !== String(candy.id))];
+      saveStoredCandies(updated);
+      return candy;
     }
   }
 
-  // Fallback / local sync
+  // Fallback / local sync if Supabase is offline
+  const newCandy: Candy = {
+    id: `candy-${Date.now()}`,
+    ...insertPayload,
+    imageUrl: payload.image_url,
+    created_at: new Date().toISOString(),
+  };
   const current = getStoredCandies();
   const updated = [newCandy, ...current];
   saveStoredCandies(updated);
@@ -186,11 +200,10 @@ export async function createCandy(payload: NewCandyPayload): Promise<Candy> {
  */
 export async function deleteCandy(id: string | number): Promise<{ success: boolean; message?: string }> {
   if (isSupabaseConfigured) {
-    try {
-      const { error } = await supabase.from('candies').delete().eq('id', id);
-      if (!error) return { success: true };
-    } catch (e) {
-      console.warn('Supabase deleteCandy error:', e);
+    const { error } = await supabase.from('candies').delete().eq('id', String(id));
+    if (error) {
+      console.error('Supabase deleteCandy error:', error);
+      throw new Error(`Erreur Supabase: ${error.message}`);
     }
   }
 

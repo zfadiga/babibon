@@ -34,7 +34,7 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
       return;
     }
 
-    // 1. Try Supabase Auth first
+    // 1. Authenticate with Supabase Auth
     if (isSupabaseConfigured) {
       try {
         const loginEmail = cleanUsername.includes('@')
@@ -46,14 +46,25 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
           password: cleanPassword,
         });
 
-        if (!authError && authData?.user) {
+        if (authError) {
+          console.warn('Supabase admin login error:', authError);
+          setErrorMsg(
+            authError.message === 'Invalid login credentials'
+              ? 'Identifiant ou mot de passe incorrect.'
+              : authError.message
+          );
+          setLoading(false);
+          return;
+        }
+
+        if (authData?.user) {
           const { data: prof } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', authData.user.id)
             .single();
 
-          const role = prof?.role || authData.user.user_metadata?.role || 'admin';
+          const role = prof?.role || authData.user.user_metadata?.role;
           if (role === 'admin' || role === 'manager') {
             setLoading(false);
             onSuccess({
@@ -63,14 +74,21 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
               role: 'admin',
             });
             return;
+          } else {
+            setErrorMsg("Ce compte n'a pas les droits administrateur dans Supabase.");
+            setLoading(false);
+            return;
           }
         }
-      } catch (sbErr) {
-        console.warn('Supabase admin login attempt notice:', sbErr);
+      } catch (sbErr: any) {
+        console.warn('Supabase admin login attempt exception:', sbErr);
+        setErrorMsg(sbErr.message || 'Erreur lors de la connexion à Supabase.');
+        setLoading(false);
+        return;
       }
     }
 
-    // Check credentials: default "admin" / "admin" or stored managers
+    // 2. Fallback only if Supabase is NOT configured (offline mock mode)
     if (
       (cleanUsername === 'admin' && cleanPassword === 'admin') ||
       (cleanUsername === 'secours' && cleanPassword === 'secours123')
@@ -86,33 +104,6 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
       }, 300);
       return;
     }
-
-    // Check custom managers in settings if any
-    try {
-      const savedSettings = localStorage.getItem('bonbon_settings');
-      if (savedSettings) {
-        const parsed = JSON.parse(savedSettings);
-        if (parsed.managers && Array.isArray(parsed.managers)) {
-          const match = parsed.managers.find(
-            (m: any) =>
-              (m.username?.toLowerCase() === cleanUsername) &&
-              m.password === cleanPassword
-          );
-          if (match) {
-            setTimeout(() => {
-              setLoading(false);
-              onSuccess({
-                id: match.id,
-                username: match.username,
-                email: `${match.username}@babibon-candyshop.com`,
-                role: 'admin',
-              });
-            }, 300);
-            return;
-          }
-        }
-      }
-    } catch {}
 
     setLoading(false);
     setErrorMsg('Identifiant ou mot de passe incorrect. (Par défaut : admin / admin)');

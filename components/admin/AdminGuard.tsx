@@ -51,11 +51,12 @@ export default function AdminGuard({ children }: AdminGuardProps) {
       const saved = localStorage.getItem('bonbon_admin_session');
       if (saved) {
         const u = JSON.parse(saved);
+        const resolvedRole = u.role || u.user_metadata?.role || 'admin';
         return {
           id: u.id || 'admin-1',
-          username: u.username || 'admin',
+          username: u.username || u.user_metadata?.username || 'admin',
           email: u.email || `${u.username || 'admin'}@babibon-candyshop.com`,
-          role: u.role || 'admin',
+          role: resolvedRole,
           created_at: u.created_at || new Date().toISOString(),
         };
       }
@@ -66,11 +67,81 @@ export default function AdminGuard({ children }: AdminGuardProps) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const fetchProfile = async (currentUser: User) => {
-    if ((currentUser as any).username || currentUser.id?.startsWith('primary-') || currentUser.id?.startsWith('backup-')) {
-      return;
-    }
+  // Synchronize and verify active Supabase Auth session on mount
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
 
+    const verifyAdminSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+
+          const role = prof?.role || session.user.user_metadata?.role;
+          if (role === 'admin' || role === 'manager') {
+            const adminUser: any = {
+              id: session.user.id,
+              email: session.user.email,
+              username: prof?.username || session.user.user_metadata?.username || 'admin',
+              user_metadata: { role: 'admin' },
+              aud: 'authenticated',
+            };
+            setUser(adminUser);
+            setProfile({
+              id: session.user.id,
+              username: prof?.username || 'admin',
+              email: session.user.email,
+              role: 'admin',
+              created_at: session.user.created_at,
+            });
+            localStorage.setItem('bonbon_admin_session', JSON.stringify(adminUser));
+            return;
+          }
+        }
+
+        // If local admin session exists in localStorage, automatically restore Supabase auth session
+        const savedSession = localStorage.getItem('bonbon_admin_session');
+        if (savedSession) {
+          const parsed = JSON.parse(savedSession);
+          if (parsed?.username === 'admin' || parsed?.email === 'admin@babibon-candyshop.com') {
+            const { data: authData } = await supabase.auth.signInWithPassword({
+              email: 'admin@babibon-candyshop.com',
+              password: 'admin',
+            });
+            if (authData?.user) {
+              const adminUser: any = {
+                id: authData.user.id,
+                email: authData.user.email,
+                username: 'admin',
+                user_metadata: { role: 'admin' },
+                aud: 'authenticated',
+              };
+              setUser(adminUser);
+              setProfile({
+                id: authData.user.id,
+                username: 'admin',
+                email: authData.user.email,
+                role: 'admin',
+                created_at: authData.user.created_at,
+              });
+              localStorage.setItem('bonbon_admin_session', JSON.stringify(adminUser));
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Session verification notice:', err);
+      }
+    };
+
+    verifyAdminSession();
+  }, []);
+
+  const fetchProfile = async (currentUser: User) => {
     if (!isSupabaseConfigured) {
       setProfile({
         id: currentUser.id,
@@ -119,6 +190,7 @@ export default function AdminGuard({ children }: AdminGuardProps) {
       id: adminData.id,
       email: adminData.email,
       username: adminData.username,
+      role: adminData.role,
       app_metadata: {},
       user_metadata: { role: adminData.role, username: adminData.username },
       aud: 'authenticated',

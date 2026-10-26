@@ -245,13 +245,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const refreshCandies = async () => {
     try {
       const remote = await fetchCandies();
-      if (remote && remote.length > 0) {
+      if (Array.isArray(remote)) {
         setCandies(remote as unknown as CandyProduct[]);
       }
     } catch (e) {
       console.warn('Candies refresh warning:', e);
     }
   };
+
+  // Fetch initial catalog from Supabase on mount
+  useEffect(() => {
+    refreshCandies();
+  }, []);
 
   // Cart operations
   const addToCart = (candy: CandyProduct, quantityToAdd: number = 1): boolean => {
@@ -458,6 +463,47 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     } catch {}
   };
+
+  // Realtime synchronization on candies table
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    const channel = supabase
+      .channel('store_realtime_candies')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'candies' },
+        (payload) => {
+          if (payload.eventType === 'INSERT' && payload.new) {
+            setCandies((prev) => {
+              if (prev.some((c) => String(c.id) === String(payload.new.id))) return prev;
+              const newCandy: CandyProduct = {
+                ...(payload.new as any),
+                imageUrl: payload.new.image_url || payload.new.imageUrl,
+              };
+              return [newCandy, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE' && payload.new) {
+            setCandies((prev) =>
+              prev.map((c) =>
+                String(c.id) === String(payload.new.id)
+                  ? { ...(payload.new as any), imageUrl: payload.new.image_url || payload.new.imageUrl }
+                  : c
+              )
+            );
+          } else if (payload.eventType === 'DELETE' && payload.old) {
+            setCandies((prev) =>
+              prev.filter((c) => String(c.id) !== String(payload.old.id))
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Realtime synchronization on orders table
   useEffect(() => {
