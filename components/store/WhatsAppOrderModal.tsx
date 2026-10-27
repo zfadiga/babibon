@@ -119,6 +119,12 @@ export const WhatsAppOrderModal: React.FC = () => {
   const handleSendOrder = async () => {
     setHasAttemptedSubmit(true);
 
+    if (!currentUser) {
+      setErrorMessage('La commande est réservée aux clients connectés. Veuillez vous connecter à votre compte client.');
+      setIsLoginOpen(true);
+      return;
+    }
+
     if (!deliveryAddress.trim()) {
       setErrorMessage('Veuillez indiquer une adresse ou un quartier de livraison.');
       return;
@@ -126,11 +132,6 @@ export const WhatsAppOrderModal: React.FC = () => {
 
     if (!customerPhone.trim() || customerPhone.replace(/[^0-9]/g, '').length < 8) {
       setErrorMessage('Veuillez indiquer un numéro de téléphone valide pour joindre la livraison.');
-      return;
-    }
-
-    if (!currentUser && !guestName.trim()) {
-      setErrorMessage('Veuillez entrer votre prénom pour la commande.');
       return;
     }
 

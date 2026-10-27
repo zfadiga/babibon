@@ -365,7 +365,70 @@ export async function updateOrderStatus(
 }
 
 /**
- * Cancel an order (client user action)
+ * Update order details (customer modifications: delivery address, phone, notes)
+ */
+export async function updateOrderDetails(
+  orderId: string | number,
+  updates: {
+    deliveryAddress?: string;
+    customerPhone?: string;
+    notes?: string;
+  }
+): Promise<{ success: boolean; message?: string }> {
+  if (isSupabaseConfigured) {
+    try {
+      const payload: any = {};
+      if (updates.deliveryAddress !== undefined) {
+        payload.delivery_address = updates.deliveryAddress;
+        payload.shipping_address = updates.deliveryAddress;
+      }
+      if (updates.customerPhone !== undefined) {
+        payload.customer_phone = updates.customerPhone;
+      }
+      if (updates.notes !== undefined) {
+        payload.notes = updates.notes;
+      }
+
+      const { error } = await supabase
+        .from('orders')
+        .update(payload)
+        .eq('id', String(orderId));
+
+      if (error) {
+        console.warn('Supabase updateOrderDetails error:', error);
+        return { success: false, message: error.message };
+      }
+    } catch (e: any) {
+      console.warn('Supabase updateOrderDetails exception:', e);
+      return { success: false, message: e.message || 'Erreur réseau' };
+    }
+  }
+
+  // Update in localStorage / session
+  if (typeof window !== 'undefined') {
+    try {
+      const current = getStoredOrders();
+      const updated = current.map((order) =>
+        String(order.id) === String(orderId)
+          ? {
+              ...order,
+              deliveryAddress: updates.deliveryAddress ?? order.deliveryAddress,
+              delivery_address: updates.deliveryAddress ?? order.delivery_address,
+              customerPhone: updates.customerPhone ?? order.customerPhone,
+              customer_phone: updates.customerPhone ?? order.customer_phone,
+              notes: updates.notes ?? order.notes,
+            }
+          : order
+      );
+      saveStoredOrders(updated);
+    } catch {}
+  }
+
+  return { success: true };
+}
+
+/**
+ * Cancel an order (restricted - admin only)
  */
 export async function cancelUserOrder(
   orderId: string | number

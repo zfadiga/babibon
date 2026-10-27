@@ -95,7 +95,9 @@ export interface OrderRecord {
   total_amount?: number;
   currency?: 'FCFA' | 'EUR' | string;
   customerPhone?: string;
+  customer_phone?: string;
   deliveryAddress?: string;
+  delivery_address?: string;
   notes?: string;
   image_url?: string;
   imageUrl?: string;

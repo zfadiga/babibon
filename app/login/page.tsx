@@ -24,6 +24,12 @@ import { useStore } from '@/context/StoreContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { ChildUser } from '@/types/candy';
 import { fireCandyConfetti, formatPrice } from '@/utils/formatters';
+import {
+  checkLoginLockout,
+  recordFailedLogin,
+  recordSuccessfulLogin,
+  GENERIC_LOCKOUT_MESSAGE,
+} from '@/lib/authSecurity';
 
 const AVATAR_OPTIONS = [
   { emoji: '🐻', bg: 'bg-amber-100 text-amber-700 border-amber-300' },
@@ -104,7 +110,15 @@ function LoginContent() {
     setLoginLoading(true);
 
     try {
-      // 1. Supabase Auth Attempt
+      // 1. Check account lockout (max 3 failed attempts)
+      const lockStatus = await checkLoginLockout(cleanIdentifier);
+      if (lockStatus.locked) {
+        setLoginError(lockStatus.message || GENERIC_LOCKOUT_MESSAGE);
+        setLoginLoading(false);
+        return;
+      }
+
+      // 2. Supabase Auth Attempt
       if (isSupabaseConfigured) {
         try {
           const userEmail = cleanIdentifier.includes('@')
@@ -116,8 +130,37 @@ function LoginContent() {
             password: cleanPassword,
           });
 
-          if (!authError && authData?.user) {
+          if (authError || !authData?.user) {
+            const failRes = await recordFailedLogin(cleanIdentifier);
+            if (failRes.locked) {
+              setLoginError(failRes.message || GENERIC_LOCKOUT_MESSAGE);
+            } else {
+              setLoginError('Identifiant ou mot de passe incorrect.');
+            }
+            setLoginLoading(false);
+            return;
+          }
+
+          if (authData?.user) {
+            // Verify user role: storefront is strictly for clients/customers
             const meta = authData.user.user_metadata || {};
+            const { data: prof } = await supabase
+              .from('profiles')
+              .select('role')
+              .eq('id', authData.user.id)
+              .single();
+
+            const role = prof?.role || meta.role;
+            if (role === 'admin' || role === 'manager') {
+              await supabase.auth.signOut();
+              setLoginError("Ce compte est un compte administrateur. L'espace boutique est réservé aux clients.");
+              setLoginLoading(false);
+              return;
+            }
+
+            // Successful login
+            await recordSuccessfulLogin(cleanIdentifier);
+
             const loggedUser: ChildUser = {
               id: authData.user.id,
               username: meta.username || cleanIdentifier,
@@ -140,7 +183,7 @@ function LoginContent() {
         }
       }
 
-      // 2. Local Storage Fallback
+      // 3. Local Storage Fallback
       const stored = localStorage.getItem('bonbon_registered_users');
       let users: ChildUser[] = stored ? JSON.parse(stored) : [];
 
@@ -166,18 +209,17 @@ function LoginContent() {
           u.firstName.toLowerCase() === cleanIdentifier.toLowerCase()
       );
 
-      if (!found) {
-        setLoginError(
-          "Aucun compte trouvé avec cet identifiant. Cliquez sur « Créer un compte » pour vous inscrire !"
-        );
+      if (!found || !found.password || found.password !== cleanPassword) {
+        const failRes = await recordFailedLogin(cleanIdentifier);
+        if (failRes.locked) {
+          setLoginError(failRes.message || GENERIC_LOCKOUT_MESSAGE);
+        } else {
+          setLoginError('Mot de passe incorrect. Veuillez vérifier votre saisie.');
+        }
         return;
       }
 
-      if (!found.password || found.password !== cleanPassword) {
-        setLoginError('Mot de passe incorrect. Veuillez vérifier votre saisie.');
-        return;
-      }
-
+      await recordSuccessfulLogin(cleanIdentifier);
       loginUser(found);
       fireCandyConfetti();
       router.push(redirectTarget);

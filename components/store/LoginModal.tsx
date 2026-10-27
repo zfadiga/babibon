@@ -6,6 +6,12 @@ import { ChildUser } from '@/types/candy';
 import { fireCandyConfetti } from '@/utils/formatters';
 import { useStore } from '@/context/StoreContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import {
+  checkLoginLockout,
+  recordFailedLogin,
+  recordSuccessfulLogin,
+  GENERIC_LOCKOUT_MESSAGE,
+} from '@/lib/authSecurity';
 
 export const LoginModal: React.FC = () => {
   const { isLoginOpen, setIsLoginOpen, setIsSignupOpen, loginUser, pendingCandyToAdd } = useStore();
@@ -33,7 +39,14 @@ export const LoginModal: React.FC = () => {
       return;
     }
 
-    // Try Supabase Auth first
+    // 2. Rate-limiting check: temporary block after 3 failed attempts
+    const lockStatus = await checkLoginLockout(cleanIdentifier);
+    if (lockStatus.locked) {
+      setError(lockStatus.message || GENERIC_LOCKOUT_MESSAGE);
+      return;
+    }
+
+    // 3. Try Supabase Auth first
     if (isSupabaseConfigured) {
       try {
         const userEmail = cleanIdentifier.includes('@')
@@ -45,8 +58,35 @@ export const LoginModal: React.FC = () => {
           password: cleanPassword,
         });
 
-        if (!authError && authData?.user) {
+        if (authError || !authData?.user) {
+          const failRes = await recordFailedLogin(cleanIdentifier);
+          if (failRes.locked) {
+            setError(failRes.message || GENERIC_LOCKOUT_MESSAGE);
+          } else {
+            setError('Identifiant ou mot de passe incorrect.');
+          }
+          return;
+        }
+
+        if (authData?.user) {
+          // Verify user role: client storefront is exclusively for clients/customers
           const meta = authData.user.user_metadata || {};
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', authData.user.id)
+            .single();
+
+          const role = prof?.role || meta.role;
+          if (role === 'admin' || role === 'manager') {
+            await supabase.auth.signOut();
+            setError("Ce compte est un compte administrateur. L'espace boutique est réservé aux clients.");
+            return;
+          }
+
+          // Successful login: reset failed attempts
+          await recordSuccessfulLogin(cleanIdentifier);
+
           const loggedUser: ChildUser = {
             id: authData.user.id,
             username: meta.username || cleanIdentifier,
@@ -71,58 +111,29 @@ export const LoginModal: React.FC = () => {
       }
     }
 
+    // 4. Local Storage Fallback if Supabase is offline
     try {
       const stored = localStorage.getItem('bonbon_registered_users');
       let users: ChildUser[] = stored ? JSON.parse(stored) : [];
 
-      // Seed sample users if brand new database
-      if (users.length === 0) {
-        users = [
-          {
-            id: 'child-1',
-            username: 'lucas',
-            password: 'password123',
-            firstName: 'Lucas',
-            avatar: '🐻',
-            avatarBg: 'bg-pink-100 text-pink-700 border-pink-300',
-            favoriteFlavor: 'Fraise',
-            joinedAt: new Date().toISOString(),
-          },
-          {
-            id: 'child-2',
-            username: 'amina',
-            password: 'password123',
-            firstName: 'Amina',
-            avatar: '🦄',
-            avatarBg: 'bg-purple-100 text-purple-700 border-purple-300',
-            favoriteFlavor: 'Pomme',
-            joinedAt: new Date().toISOString(),
-          },
-        ];
-        localStorage.setItem('bonbon_registered_users', JSON.stringify(users));
-      }
-
-      // Find user by username
       const found = users.find(
         (u) =>
           u.username.toLowerCase() === cleanIdentifier.toLowerCase() ||
           u.firstName.toLowerCase() === cleanIdentifier.toLowerCase()
       );
 
-      if (!found) {
-        setError(
-          "Aucun compte trouvé avec ce nom d'utilisateur. Clique ci-dessous sur « Créer un compte » pour t'inscrire !"
-        );
-        return;
-      }
-
-      // Check password
-      if (!found.password || found.password !== cleanPassword) {
-        setError('Mot de passe incorrect. Veuillez vérifier votre saisie.');
+      if (!found || !found.password || found.password !== cleanPassword) {
+        const failRes = await recordFailedLogin(cleanIdentifier);
+        if (failRes.locked) {
+          setError(failRes.message || GENERIC_LOCKOUT_MESSAGE);
+        } else {
+          setError('Identifiant ou mot de passe incorrect.');
+        }
         return;
       }
 
       // Successful login into private session
+      await recordSuccessfulLogin(cleanIdentifier);
       fireCandyConfetti();
       loginUser(found);
       setIsLoginOpen(false);

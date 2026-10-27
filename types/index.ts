@@ -41,7 +41,9 @@ export type Order = {
   created_at: string;
   createdAt?: string;
   customerPhone?: string;
+  customer_phone?: string;
   deliveryAddress?: string;
+  delivery_address?: string;
   notes?: string;
   image_url?: string;
   imageUrl?: string;
