@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-import { Candy, NewCandyPayload, Order, CreateUserPayload, UserProfile } from '@/types';
+import { Candy, NewCandyPayload, Order, CreateUserPayload, UserProfile, AuditLogEntry } from '@/types';
 import { DEFAULT_CANDIES, INITIAL_MOCK_ORDERS, DEFAULT_STORE_SETTINGS } from '@/data/defaultCandies';
 import { CandyProduct, OrderRecord, StoreSettings } from '@/types/candy';
 
@@ -561,17 +561,29 @@ export async function fetchProfiles(): Promise<UserProfile[]> {
 }
 
 /**
- * Delete a profile from Supabase
+ * Delete a profile from Supabase with server-side permission checks and audit logging
  */
-export async function deleteUserProfile(id: string): Promise<{ success: boolean; message?: string }> {
+export async function deleteUserProfile(
+  id: string,
+  reason?: string
+): Promise<{ success: boolean; message?: string }> {
   if (isSupabaseConfigured) {
     try {
-      const { error } = await supabase.from('profiles').delete().eq('id', id);
+      // 1. Call server-side SECURITY DEFINER function with strict permission check and audit logging
+      const { data, error } = await supabase.rpc('delete_user_account', {
+        p_target_user_id: id,
+        p_reason: reason || 'Suppression via interface',
+      });
+
       if (error) {
         return { success: false, message: error.message };
       }
+
+      if (data && !data.success) {
+        return { success: false, message: data.message };
+      }
     } catch (e: any) {
-      return { success: false, message: e.message };
+      return { success: false, message: e.message || 'Erreur serveur lors de la suppression' };
     }
   }
 
@@ -587,7 +599,39 @@ export async function deleteUserProfile(id: string): Promise<{ success: boolean;
     } catch {}
   }
 
-  return { success: true };
+  return { success: true, message: 'Compte supprimé avec succès et consigné dans le journal d’audit.' };
+}
+
+/**
+ * Fetch security audit logs (Admin only)
+ */
+export async function fetchAuditLogs(limit: number = 100, offset: number = 0): Promise<AuditLogEntry[]> {
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase.rpc('get_audit_logs', {
+        p_limit: limit,
+        p_offset: offset,
+      });
+
+      if (!error && Array.isArray(data)) {
+        return data as AuditLogEntry[];
+      }
+
+      // Fallback direct select on audit_logs table
+      const { data: directData, error: directErr } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (!directErr && directData) {
+        return directData as AuditLogEntry[];
+      }
+    } catch (e) {
+      console.warn('fetchAuditLogs error:', e);
+    }
+  }
+  return [];
 }
 
 /**

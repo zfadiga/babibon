@@ -80,3 +80,18 @@ export interface CreateUserPayload {
   password: string;
   role: 'admin' | 'customer' | 'client';
 }
+
+export interface AuditLogEntry {
+  id: string;
+  created_at: string;
+  actor_id?: string;
+  actor_email?: string;
+  actor_role?: string;
+  action: string;
+  target_id?: string;
+  target_type: string;
+  status: 'SUCCESS' | 'DENIED' | 'FAILED' | string;
+  ip_address?: string;
+  user_agent?: string;
+  details?: Record<string, any>;
+}

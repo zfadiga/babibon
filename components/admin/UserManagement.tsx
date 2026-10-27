@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { createNewUser, fetchProfiles, deleteUserProfile } from '@/lib/api';
 import { CreateUserPayload, UserProfile } from '@/types';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import AuditLogs from './AuditLogs';
 import {
   UserPlus,
   Shield,
@@ -42,6 +43,7 @@ export default function UserManagement() {
 
   // Deletion modal state
   const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
   const [deleting, setDeleting] = useState(false);
 
   const loadProfiles = async (silent = false) => {
@@ -151,11 +153,17 @@ export default function UserManagement() {
     setErrorMsg(null);
 
     try {
-      const res = await deleteUserProfile(userToDelete.id);
+      const res = await deleteUserProfile(
+        userToDelete.id,
+        deleteReason.trim() || 'Suppression administrative par un gestionnaire'
+      );
       if (res.success) {
         setProfiles((prev) => prev.filter((p) => p.id !== userToDelete.id));
-        setSuccessMsg(`Profil de @${userToDelete.username || userToDelete.email} supprimé avec succès.`);
+        setSuccessMsg(
+          `Profil de @${userToDelete.username || userToDelete.email} supprimé avec succès. Enregistré dans le journal d'audit.`
+        );
         setUserToDelete(null);
+        setDeleteReason('');
       } else {
         setErrorMsg(res.message || 'Erreur lors de la suppression.');
       }
@@ -574,7 +582,7 @@ export default function UserManagement() {
       {/* Confirmation Modal for Profile Deletion */}
       {userToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-rose-100 animate-scale-up">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-rose-100 animate-scale-up">
             <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-4">
               <AlertCircle className="w-6 h-6" />
             </div>
@@ -587,10 +595,30 @@ export default function UserManagement() {
               Le compte de <strong className="text-gray-900">@{userToDelete.username || userToDelete.email}</strong> ({userToDelete.role}) sera retiré de la base de données.
             </p>
 
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                Motif de la suppression (enregistré dans le journal d&apos;audit) :
+              </label>
+              <textarea
+                rows={2}
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="Ex: Demande de suppression conforme RGPD, doublon de compte..."
+                className="w-full p-2.5 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200/80 mb-4 text-[11px] text-amber-900 leading-snug">
+              🔒 <strong>Sécurité serveur :</strong> Cette action est protégée par les permissions PostgreSQL côté serveur et son exécution sera tracée de manière permanente dans le journal d&apos;audit.
+            </div>
+
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setUserToDelete(null)}
+                onClick={() => {
+                  setUserToDelete(null);
+                  setDeleteReason('');
+                }}
                 disabled={deleting}
                 className="w-1/2 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold transition-colors cursor-pointer"
               >
@@ -608,12 +636,17 @@ export default function UserManagement() {
                 ) : (
                   <Trash2 className="w-3.5 h-3.5" />
                 )}
-                <span>Supprimer</span>
+                <span>Supprimer & Consigner</span>
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Audit Logs Journal Section */}
+      <div className="pt-4">
+        <AuditLogs />
+      </div>
     </div>
   );
 }

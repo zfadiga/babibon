@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, LogOut, Check, Phone, MapPin, Save, AlertCircle } from 'lucide-react';
+import { X, LogOut, Check, Phone, MapPin, Save, AlertCircle, Trash2, Loader2, ShieldAlert } from 'lucide-react';
 import { ChildUser } from '@/types/candy';
 import { FUN_AVATARS } from '@/data/defaultCandies';
 import { fireCandyConfetti } from '@/utils/formatters';
 import { useStore } from '@/context/StoreContext';
+import { deleteUserProfile } from '@/lib/api';
 
 export const ProfileModal: React.FC = () => {
   const { isProfileOpen, setIsProfileOpen, currentUser, updateUserProfile, logoutUser } = useStore();
@@ -17,6 +18,9 @@ export const ProfileModal: React.FC = () => {
   const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     if (isProfileOpen && currentUser) {
@@ -65,6 +69,30 @@ export const ProfileModal: React.FC = () => {
     setTimeout(() => {
       setIsProfileOpen(false);
     }, 1200);
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!currentUser) return;
+    setIsDeleting(true);
+    setDeleteError('');
+
+    try {
+      const res = await deleteUserProfile(
+        currentUser.id,
+        'Suppression du compte demandée par le client lui-même'
+      );
+      if (res.success) {
+        setIsDeleteModalOpen(false);
+        setIsProfileOpen(false);
+        logoutUser();
+      } else {
+        setDeleteError(res.message || 'Impossible de supprimer le compte.');
+      }
+    } catch (err: any) {
+      setDeleteError(err.message || 'Erreur lors de la suppression.');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -229,8 +257,77 @@ export const ProfileModal: React.FC = () => {
               <LogOut className="w-5 h-5" />
             </button>
           </div>
+
+          {/* Delete Account link */}
+          <div className="pt-3 border-t border-pink-100 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setIsDeleteModalOpen(true)}
+              className="text-xs text-rose-500 hover:text-rose-700 font-medium hover:underline flex items-center gap-1.5 cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Supprimer définitivement mon compte</span>
+            </button>
+          </div>
         </form>
       </div>
+
+      {/* Confirmation Modal for Account Self-Deletion */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-rose-100 animate-scale-up text-center">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-3">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+
+            <h3 className="text-base font-bold text-gray-900 mb-1">
+              Supprimer votre compte ?
+            </h3>
+
+            <p className="text-xs text-gray-600 mb-4 leading-relaxed">
+              Cette action supprimera définitivement votre profil, votre panier et vos informations de connexion.
+            </p>
+
+            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 mb-4 text-left leading-snug">
+              🔒 <strong>Sécurité & Audit :</strong> Cette opération est protégée par les permissions serveur et sera consignée dans le journal d&apos;audit de sécurité.
+            </div>
+
+            {deleteError && (
+              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs mb-4">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setDeleteError('');
+                }}
+                disabled={isDeleting}
+                className="w-1/2 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Annuler
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={isDeleting}
+                className="w-1/2 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-md shadow-rose-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5" />
+                )}
+                <span>Confirmer</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
