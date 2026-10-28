@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { CandyProduct, CartItem, ChildUser, StoreSettings, OrderRecord } from '@/types/candy';
 import { DEFAULT_CANDIES, DEFAULT_STORE_SETTINGS, INITIAL_MOCK_ORDERS } from '@/data/defaultCandies';
-import { submitOrder, fetchCandies, updateOrderStatus, updateOrderDetails } from '@/lib/api';
+import { submitOrder, fetchCandies, updateOrderStatus, updateOrderDetails, fetchStoreSettings } from '@/lib/api';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { registerActiveSession, verifyCurrentSession } from '@/lib/authSecurity';
 import { fireCandyConfetti } from '@/utils/formatters';
@@ -21,6 +21,7 @@ interface StoreContextType {
   clearCart: () => void;
   settings: StoreSettings;
   setSettings: React.Dispatch<React.SetStateAction<StoreSettings>>;
+  refreshSettings: () => Promise<void>;
   toggleCurrency: () => void;
   orders: OrderRecord[];
   placeOrder: (order: OrderRecord) => Promise<void>;
@@ -322,9 +323,43 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  // Fetch initial catalog from Supabase on mount
+  const refreshSettings = async () => {
+    try {
+      const remote = await fetchStoreSettings();
+      if (remote) {
+        setSettings(remote);
+      }
+    } catch (e) {
+      console.warn('Store settings refresh warning:', e);
+    }
+  };
+
+  // Fetch initial catalog and settings from Supabase on mount
   useEffect(() => {
     refreshCandies();
+    refreshSettings();
+
+    if (!isSupabaseConfigured) return;
+
+    // Realtime listener for store_settings updates (e.g. hero carousel changes)
+    const settingsChannel = supabase
+      .channel('public_store_settings')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'store_settings',
+        },
+        () => {
+          refreshSettings();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(settingsChannel);
+    };
   }, []);
 
   // Cart operations
@@ -700,6 +735,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         clearCart,
         settings,
         setSettings,
+        refreshSettings,
         toggleCurrency,
         orders,
         placeOrder,

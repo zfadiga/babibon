@@ -58,6 +58,17 @@ export interface ManagerAccount {
   lastLogin?: string;
 }
 
+export interface HeroSlide {
+  id: number;
+  imageUrl: string;
+  badge: string;
+  title: string;
+  highlight: string;
+  description: string;
+  tag: string;
+  accentColor?: string;
+}
+
 export interface StoreSettings {
   storeName: string;
   whatsappNumber: string; // e.g. '2250779323716'
@@ -68,6 +79,7 @@ export interface StoreSettings {
   freeDeliveryThreshold: number; // e.g. 4000 FCFA
   deliveryFee: number; // e.g. 500 FCFA
   storeNotice?: string;
+  heroSlides?: HeroSlide[];
 }
 
 export interface OrderItemRecord {

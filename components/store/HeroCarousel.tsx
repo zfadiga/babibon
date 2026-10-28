@@ -13,53 +13,16 @@ import {
   Star,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
-
-interface SlideData {
-  id: number;
-  imageUrl: string;
-  badge: string;
-  title: string;
-  highlight: string;
-  description: string;
-  tag: string;
-  accentColor: string;
-}
-
-const HERO_SLIDES: SlideData[] = [
-  {
-    id: 1,
-    imageUrl: 'https://images.unsplash.com/photo-1582058091505-f87a2e55a40f?auto=format&fit=crop&w=1600&q=85',
-    badge: 'Confiserie Féerique ✨',
-    title: 'L’univers le plus gourmand',
-    highlight: 'd’Abidjan 🍭',
-    description: 'Des oursons gélifiés tendres, des sucettes multicolores et des créations sucrées qui émerveillent petits et grands.',
-    tag: 'Livraison express à domicile ou à l’école',
-    accentColor: 'from-pink-500 to-rose-600',
-  },
-  {
-    id: 2,
-    imageUrl: 'https://images.unsplash.com/photo-1575224300306-1b8da36134ec?auto=format&fit=crop&w=1600&q=85',
-    badge: 'Spécial Récréation 🎪',
-    title: 'Sucettes Géantes & Délices',
-    highlight: 'Tourbillon 🌀',
-    description: 'Retrouve la magie des fêtes foraines ! Des saveurs fruitées intenses et des textures irrésistibles à partager.',
-    tag: 'Plus de 20 variétés de bonbons en stock',
-    accentColor: 'from-amber-500 to-rose-500',
-  },
-  {
-    id: 3,
-    imageUrl: 'https://images.unsplash.com/photo-1541781774459-bb2af2f05b55?auto=format&fit=crop&w=1600&q=85',
-    badge: 'Sensations Pétillantes ⚡',
-    title: 'Rubans Rainbow Ultra-Acides',
-    highlight: '& Gélifiés 🌈',
-    description: 'Fais le plein de friandises piquantes et passe ta commande en quelques secondes directement sur WhatsApp !',
-    tag: 'Paiement à la livraison possible',
-    accentColor: 'from-purple-500 to-pink-500',
-  },
-];
+import { HeroSlide } from '@/types/candy';
+import { DEFAULT_HERO_SLIDES } from '@/data/defaultCandies';
 
 export const HeroCarousel: React.FC = () => {
-  const { setIsWhatsAppModalOpen } = useStore();
+  const { settings, setIsWhatsAppModalOpen } = useStore();
+  const slides: HeroSlide[] =
+    settings?.heroSlides && settings.heroSlides.length > 0
+      ? settings.heroSlides
+      : DEFAULT_HERO_SLIDES;
+
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -69,20 +32,27 @@ export const HeroCarousel: React.FC = () => {
     if (isPaused) return;
 
     timerRef.current = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % HERO_SLIDES.length);
+      setCurrentSlide((prev) => (prev + 1) % slides.length);
     }, 3000);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isPaused]);
+  }, [isPaused, slides.length]);
+
+  // Reset currentSlide if it exceeds slides length (e.g. after dynamic slide changes)
+  useEffect(() => {
+    if (currentSlide >= slides.length) {
+      setCurrentSlide(0);
+    }
+  }, [slides.length, currentSlide]);
 
   const handlePrev = () => {
-    setCurrentSlide((prev) => (prev - 1 + HERO_SLIDES.length) % HERO_SLIDES.length);
+    setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
   };
 
   const handleNext = () => {
-    setCurrentSlide((prev) => (prev + 1) % HERO_SLIDES.length);
+    setCurrentSlide((prev) => (prev + 1) % slides.length);
   };
 
   const handleScrollToCatalog = () => {
@@ -101,7 +71,7 @@ export const HeroCarousel: React.FC = () => {
     >
       {/* Slides Container */}
       <div className="relative h-[480px] sm:h-[540px] md:h-[600px] w-full">
-        {HERO_SLIDES.map((slide, index) => {
+        {slides.map((slide, index) => {
           const isActive = index === currentSlide;
           return (
             <div
@@ -206,7 +176,7 @@ export const HeroCarousel: React.FC = () => {
 
       {/* Carousel Progress & Indicator Dots */}
       <div className="absolute bottom-5 sm:bottom-7 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2.5 bg-slate-950/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/15">
-        {HERO_SLIDES.map((slide, index) => {
+        {slides.map((slide, index) => {
           const isActive = index === currentSlide;
           return (
             <button

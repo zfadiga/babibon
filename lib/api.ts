@@ -43,6 +43,143 @@ export async function uploadCandyImage(file: File): Promise<string> {
   });
 }
 
+/**
+ * Image helper: Uploads carousel hero image to Supabase storage ('candies' bucket)
+ */
+export async function uploadHeroImage(file: File): Promise<string> {
+  if (isSupabaseConfigured) {
+    try {
+      const fileExt = file.name.split('.').pop() || 'jpg';
+      const cleanFileName = `hero/slide-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+
+      const { data, error } = await supabase.storage
+        .from('candies')
+        .upload(cleanFileName, file, {
+          cacheControl: '3600',
+          upsert: true,
+        });
+
+      if (!error && data) {
+        const { data: publicData } = supabase.storage
+          .from('candies')
+          .getPublicUrl(cleanFileName);
+        if (publicData?.publicUrl) {
+          return publicData.publicUrl;
+        }
+      }
+    } catch (storageErr) {
+      console.warn('Supabase hero storage fallback:', storageErr);
+    }
+  }
+
+  // Base64 fallback
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Fetch store settings (Supabase with localStorage and DEFAULT_STORE_SETTINGS fallback)
+ */
+export async function fetchStoreSettings(): Promise<StoreSettings> {
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from('store_settings')
+        .select('*')
+        .eq('id', 'default')
+        .maybeSingle();
+
+      if (!error && data) {
+        const localSettings = typeof window !== 'undefined' ? localStorage.getItem('bonbon_settings') : null;
+        const parsedLocal = localSettings ? JSON.parse(localSettings) : {};
+
+        const merged: StoreSettings = {
+          ...DEFAULT_STORE_SETTINGS,
+          ...parsedLocal,
+          storeName: data.store_name || parsedLocal.storeName || DEFAULT_STORE_SETTINGS.storeName,
+          whatsappNumber: data.whatsapp_number || parsedLocal.whatsappNumber || DEFAULT_STORE_SETTINGS.whatsappNumber,
+          currency: (data.currency as any) || parsedLocal.currency || DEFAULT_STORE_SETTINGS.currency,
+          eurToFcfaRate: Number(data.eur_to_fcfa_rate ?? parsedLocal.eurToFcfaRate ?? DEFAULT_STORE_SETTINGS.eurToFcfaRate),
+          freeDeliveryThreshold: Number(data.free_delivery_threshold ?? parsedLocal.freeDeliveryThreshold ?? DEFAULT_STORE_SETTINGS.freeDeliveryThreshold),
+          deliveryFee: Number(data.delivery_fee ?? parsedLocal.deliveryFee ?? DEFAULT_STORE_SETTINGS.deliveryFee),
+          storeNotice: data.store_notice ?? parsedLocal.storeNotice ?? DEFAULT_STORE_SETTINGS.storeNotice,
+          heroSlides: Array.isArray(data.hero_slides) && data.hero_slides.length > 0 ? data.hero_slides : (parsedLocal.heroSlides || DEFAULT_STORE_SETTINGS.heroSlides),
+        };
+
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('bonbon_settings', JSON.stringify(merged));
+        }
+        return merged;
+      }
+    } catch (e) {
+      console.warn('fetchStoreSettings error:', e);
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem('bonbon_settings');
+      if (saved) {
+        return { ...DEFAULT_STORE_SETTINGS, ...JSON.parse(saved) };
+      }
+    } catch {}
+  }
+
+  return DEFAULT_STORE_SETTINGS;
+}
+
+/**
+ * Update store settings in Supabase and sync locally
+ */
+export async function updateStoreSettings(
+  updates: Partial<StoreSettings>
+): Promise<{ success: boolean; message?: string; settings?: StoreSettings }> {
+  let updatedSettings: StoreSettings = DEFAULT_STORE_SETTINGS;
+
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem('bonbon_settings');
+      const current = saved ? JSON.parse(saved) : DEFAULT_STORE_SETTINGS;
+      updatedSettings = { ...current, ...updates };
+      localStorage.setItem('bonbon_settings', JSON.stringify(updatedSettings));
+    } catch {}
+  }
+
+  if (isSupabaseConfigured) {
+    try {
+      const dbPayload: any = {
+        id: 'default',
+        updated_at: new Date().toISOString(),
+      };
+      if (updates.storeName !== undefined) dbPayload.store_name = updates.storeName;
+      if (updates.whatsappNumber !== undefined) dbPayload.whatsapp_number = updates.whatsappNumber;
+      if (updates.currency !== undefined) dbPayload.currency = updates.currency;
+      if (updates.eurToFcfaRate !== undefined) dbPayload.eur_to_fcfa_rate = updates.eurToFcfaRate;
+      if (updates.freeDeliveryThreshold !== undefined) dbPayload.free_delivery_threshold = updates.freeDeliveryThreshold;
+      if (updates.deliveryFee !== undefined) dbPayload.delivery_fee = updates.deliveryFee;
+      if (updates.storeNotice !== undefined) dbPayload.store_notice = updates.storeNotice;
+      if (updates.heroSlides !== undefined) dbPayload.hero_slides = updates.heroSlides;
+
+      const { error } = await supabase
+        .from('store_settings')
+        .upsert(dbPayload, { onConflict: 'id' });
+
+      if (error) {
+        console.warn('Supabase store_settings update warning:', error);
+        return { success: true, message: 'Enregistré localement (Supabase: ' + error.message + ')', settings: updatedSettings };
+      }
+    } catch (e: any) {
+      console.warn('Supabase store_settings update exception:', e);
+    }
+  }
+
+  return { success: true, message: 'Paramètres mis à jour avec succès.', settings: updatedSettings };
+}
+
 // Memory & LocalStorage Cache Helpers
 function getStoredCandies(): Candy[] {
   if (typeof window === 'undefined') return DEFAULT_CANDIES as unknown as Candy[];

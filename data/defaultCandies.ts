@@ -1,4 +1,37 @@
-import { CandyProduct, StoreSettings, ManagerAccount, OrderRecord } from '../types/candy';
+import { CandyProduct, StoreSettings, ManagerAccount, OrderRecord, HeroSlide } from '../types/candy';
+
+export const DEFAULT_HERO_SLIDES: HeroSlide[] = [
+  {
+    id: 1,
+    imageUrl: 'https://images.unsplash.com/photo-1582058091505-f87a2e55a40f?auto=format&fit=crop&w=1600&q=85',
+    badge: 'Confiserie Féerique ✨',
+    title: 'L’univers le plus gourmand',
+    highlight: 'd’Abidjan 🍭',
+    description: 'Des oursons gélifiés tendres, des sucettes multicolores et des créations sucrées qui émerveillent petits et grands.',
+    tag: 'Livraison express à domicile ou à l’école',
+    accentColor: 'from-pink-500 to-rose-600',
+  },
+  {
+    id: 2,
+    imageUrl: 'https://images.unsplash.com/photo-1575224300306-1b8da36134ec?auto=format&fit=crop&w=1600&q=85',
+    badge: 'Spécial Récréation 🎪',
+    title: 'Sucettes Géantes & Délices',
+    highlight: 'Tourbillon 🌀',
+    description: 'Retrouve la magie des fêtes foraines ! Des saveurs fruitées intenses et des textures irrésistibles à partager.',
+    tag: 'Plus de 20 variétés de bonbons en stock',
+    accentColor: 'from-amber-500 to-rose-500',
+  },
+  {
+    id: 3,
+    imageUrl: 'https://images.unsplash.com/photo-1541781774459-bb2af2f05b55?auto=format&fit=crop&w=1600&q=85',
+    badge: 'Sensations Pétillantes ⚡',
+    title: 'Rubans Rainbow Ultra-Acides',
+    highlight: '& Gélifiés 🌈',
+    description: 'Fais le plein de friandises piquantes et passe ta commande en quelques secondes directement sur WhatsApp !',
+    tag: 'Paiement à la livraison possible',
+    accentColor: 'from-purple-500 to-pink-500',
+  },
+];
 
 export const DEFAULT_MANAGERS: ManagerAccount[] = [
   {
@@ -28,7 +61,8 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   managers: DEFAULT_MANAGERS,
   freeDeliveryThreshold: 4000,
   deliveryFee: 500,
-  storeNotice: "Livraison rapide chez toi ou à l'école ! Bonbons 100% magiques et certifiés gourmands ✨"
+  storeNotice: "Livraison rapide chez toi ou à l'école ! Bonbons 100% magiques et certifiés gourmands ✨",
+  heroSlides: DEFAULT_HERO_SLIDES,
 };
 
 export const FUN_AVATARS = [

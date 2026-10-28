@@ -8,6 +8,7 @@ import CandyTable from '@/components/admin/CandyTable';
 import OrdersTable from '@/components/admin/OrdersTable';
 import AccountSettings from '@/components/admin/AccountSettings';
 import UserManagement from '@/components/admin/UserManagement';
+import HeroCarouselSettings from '@/components/admin/HeroCarouselSettings';
 import { fetchCandies } from '@/lib/api';
 import { Candy } from '@/types';
 import { Server, Database } from 'lucide-react';
@@ -63,9 +64,12 @@ export default function AdminDashboardPage() {
             </div>
           )}
 
-          {/* TAB 3: ACCOUNT CREDENTIALS & USER MANAGEMENT */}
+          {/* TAB 3: ACCOUNT CREDENTIALS, HERO CAROUSEL & USER MANAGEMENT */}
           {activeTab === 'settings' && (
             <div className="space-y-8 animate-fade-in">
+              {/* Hero Carousel customization (3 images & promo texts) */}
+              <HeroCarouselSettings />
+
               {/* Admin login credentials update (username & password) */}
               <AccountSettings />
 
