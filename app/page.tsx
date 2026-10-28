@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { StoreNavbar } from '@/components/store/Navbar';
 import { CandyCard } from '@/components/store/CandyCard';
+import { HeroCarousel } from '@/components/store/HeroCarousel';
 import { useStore } from '@/context/StoreContext';
 import { CATEGORY_INFO } from '@/data/defaultCandies';
 import {
@@ -65,6 +66,9 @@ export default function StoreHomePage() {
       <StoreNavbar />
 
       <main className="flex-1">
+        {/* HERO SECTION WITH 3-IMAGE CAROUSEL ROTATING EVERY 3 SECONDS */}
+        <HeroCarousel />
+
         {/* CATALOG SECTION */}
         <section id="catalog" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
           {/* Section Header */}
