@@ -61,7 +61,7 @@ export const StoreNavbar: React.FC = () => {
       <div className="bg-gradient-to-r from-pink-500 via-rose-400 to-amber-400 text-white text-xs font-medium py-1 px-4 text-center flex items-center justify-center gap-2">
         <Sparkles className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: '8s' }} />
         <span className="truncate">
-          {settings.storeNotice || "🎉 Bienvenue chez BonbonMagique ! Commande tes friandises sur WhatsApp !"}
+          {settings.storeNotice || "🎉 Bienvenue chez BABIBON SWEET ! Commande tes friandises sur WhatsApp !"}
         </span>
         <span className="hidden sm:inline">🍬✨</span>
       </div>
@@ -70,15 +70,12 @@ export const StoreNavbar: React.FC = () => {
         {/* Brand Wordmark */}
         <Link
           href="/"
-          className="flex items-center gap-2.5 text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-400 rounded-xl p-1 shrink-0"
+          className="flex items-center text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-400 rounded-xl p-1 shrink-0"
           title="Retour à la boutique"
         >
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pink-500 to-amber-400 flex items-center justify-center text-xl shadow-md shadow-pink-200 group-hover:scale-105 transition-transform duration-200">
-            🍭
-          </div>
           <div>
             <span className="text-xl sm:text-2xl font-candy font-bold tracking-tight bg-gradient-to-r from-pink-600 via-rose-500 to-amber-500 bg-clip-text text-transparent block leading-tight">
-              BonbonMagique
+              BABIBON SWEET
             </span>
             <span className="text-[11px] font-medium text-pink-500 tracking-wider uppercase block">
               La confiserie des champions

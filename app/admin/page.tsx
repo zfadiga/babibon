@@ -83,7 +83,7 @@ export default function AdminDashboardPage() {
         <footer className="bg-white border-t border-gray-100 py-6 text-xs text-gray-500">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center space-x-2">
-              <span className="font-semibold text-gray-700">Babibon Candy Admin</span>
+              <span className="font-semibold text-gray-700">BABIBON SWEET Admin</span>
               <span>&bull;</span>
               <span>Protected with Supabase Auth & Role-Based Access</span>
             </div>

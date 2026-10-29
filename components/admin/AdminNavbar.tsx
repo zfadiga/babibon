@@ -15,15 +15,12 @@ export default function AdminNavbar({ activeTab, setActiveTab }: AdminNavbarProp
     <header className="bg-white border-b border-rose-100 shadow-sm sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          {/* Logo & Brand */}
+          {/* Brand */}
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-500 to-pink-500 flex items-center justify-center text-white shadow-md shadow-rose-200">
-              <Candy className="w-6 h-6" />
-            </div>
             <div>
               <div className="flex items-center space-x-2">
                 <span className="text-xl font-bold bg-gradient-to-r from-rose-600 to-pink-600 bg-clip-text text-transparent">
-                  Babibon Sweets
+                  BABIBON SWEET
                 </span>
                 <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-rose-100 text-rose-800">
                   <ShieldCheck className="w-3 h-3 mr-1" />

@@ -178,13 +178,10 @@ export default function StoreHomePage() {
       {/* FOOTER */}
       <footer className="bg-white border-t border-pink-100 mt-16 py-10 text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-3 text-center md:text-left">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pink-500 to-amber-400 flex items-center justify-center text-xl text-white shadow-md shadow-pink-200">
-              🍭
-            </div>
+          <div className="flex items-center text-center md:text-left">
             <div>
               <p className="font-candy font-bold text-base text-slate-800">
-                BonbonMagique - Confiserie Enchanteresse
+                BABIBON SWEET
               </p>
               <p className="text-[11px] text-slate-400">
                 Commandes directes WhatsApp &bull; Abidjan, Côte d'Ivoire

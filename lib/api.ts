@@ -96,11 +96,13 @@ export async function fetchStoreSettings(): Promise<StoreSettings> {
       if (!error && data) {
         const localSettings = typeof window !== 'undefined' ? localStorage.getItem('bonbon_settings') : null;
         const parsedLocal = localSettings ? JSON.parse(localSettings) : {};
+        const rawStoreName = data.store_name || parsedLocal.storeName || DEFAULT_STORE_SETTINGS.storeName;
+        const resolvedStoreName = (!rawStoreName || rawStoreName.includes('BonbonMagique')) ? 'BABIBON SWEET' : rawStoreName;
 
         const merged: StoreSettings = {
           ...DEFAULT_STORE_SETTINGS,
           ...parsedLocal,
-          storeName: data.store_name || parsedLocal.storeName || DEFAULT_STORE_SETTINGS.storeName,
+          storeName: resolvedStoreName,
           whatsappNumber: data.whatsapp_number || parsedLocal.whatsappNumber || DEFAULT_STORE_SETTINGS.whatsappNumber,
           currency: (data.currency as any) || parsedLocal.currency || DEFAULT_STORE_SETTINGS.currency,
           eurToFcfaRate: Number(data.eur_to_fcfa_rate ?? parsedLocal.eurToFcfaRate ?? DEFAULT_STORE_SETTINGS.eurToFcfaRate),

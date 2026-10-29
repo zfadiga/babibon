@@ -53,7 +53,7 @@ export const DEFAULT_MANAGERS: ManagerAccount[] = [
 ];
 
 export const DEFAULT_STORE_SETTINGS: StoreSettings = {
-  storeName: "BonbonMagique 🍭",
+  storeName: "BABIBON SWEET",
   whatsappNumber: "2250779323716", // +225 07 79 32 37 16
   currency: 'FCFA',
   eurToFcfaRate: 655.957,

@@ -114,6 +114,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (parsed.whatsappNumber === '2250700112233' || !parsed.whatsappNumber) {
           parsed.whatsappNumber = '2250779323716';
         }
+        if (!parsed.storeName || parsed.storeName.includes('BonbonMagique')) {
+          parsed.storeName = 'BABIBON SWEET';
+        }
         return parsed;
       }
     } catch {}

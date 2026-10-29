@@ -270,11 +270,8 @@ export default function AdminGuard({ children }: AdminGuardProps) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-rose-50 via-pink-50 to-amber-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-6">
-          <div className="inline-flex items-center justify-center p-3.5 bg-gradient-to-tr from-rose-500 to-pink-500 text-white rounded-2xl shadow-lg mb-3 shadow-rose-200">
-            <Candy className="w-8 h-8" />
-          </div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-            Candy Shop Admin
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight font-candy">
+            BABIBON SWEET Admin
           </h1>
           <p className="text-sm text-gray-600 mt-1">
             Espace d'administration et de gestion des commandes

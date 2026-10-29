@@ -4,8 +4,8 @@ import { StoreProvider } from '@/context/StoreContext';
 import { GlobalStoreModals } from '@/components/store/GlobalStoreModals';
 
 export const metadata: Metadata = {
-  title: 'BonbonMagique - Confiserie Enchanteresse & Espace Admin',
-  description: 'Boutique en ligne féerique de bonbons pour enfants avec commande WhatsApp et tableau de bord admin unifié.',
+  title: 'BABIBON SWEET - Confiserie & Espace Admin',
+  description: 'Boutique en ligne de bonbons avec commande WhatsApp et tableau de bord admin unifié.',
 };
 
 export default function RootLayout({
